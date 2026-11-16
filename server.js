@@ -176,9 +176,18 @@ store.save = function() {
   return p;
 };
 
-// Connect to MongoDB Atlas on boot and perform initial cloud sync
-mongo.connectMongo().then(connected => {
+// Connect to MongoDB Atlas on boot, restore snapshot if empty (cloud auto-recovery), and perform initial cloud sync
+mongo.connectMongo().then(async connected => {
   if (connected) {
+    if (!store.data.users || store.data.users.length === 0) {
+      const restored = await mongo.restoreFromMongo();
+      if (restored && restored.users && restored.users.length) {
+        Object.assign(store.data, restored);
+        setupCode = null;
+        await origStoreSave();
+        console.log('[mongo] Successfully recovered full database from MongoDB Atlas on boot!');
+      }
+    }
     mongo.syncToMongo(store.data).catch(() => {});
   }
 }).catch(err => console.error('[mongo boot err]', err.message));

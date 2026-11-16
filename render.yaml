@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: erp-rvmaitech
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SENDER_EMAIL
+        value: rvmaitech2026@gmail.com
+      - key: MONGO_URI
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: GMAIL_PASS
+        sync: false
