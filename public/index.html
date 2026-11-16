@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Suite</title>
+<link rel="icon" href="/logo.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="auth" id="auth" hidden></div>
+<div class="app" id="app" hidden>
+  <aside class="side" id="side">
+    <div class="brand">
+      <img src="/logo.png" alt="RvmAiTech" class="brand-logo-img">
+      <div class="brand-text" style="display:none"><span class="brand-name" id="companyName">RvmAiTech</span><div class="brand-sub" id="brandSub">Business Suite</div></div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Modules"></nav>
+    <div class="side-foot" id="sideFoot"></div>
+  </aside>
+  <main class="main" id="main">
+    <div id="banner"></div>
+    <div class="view" id="view"></div>
+  </main>
+</div>
+<dialog class="dlg" id="dlg"></dialog>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="tip" id="tip" hidden></div>
+<script src="/js/01-core.js"></script>
+<script src="/js/02-ui.js"></script>
+<script src="/js/03-erp.js"></script>
+<script src="/js/04-crm.js"></script>
+<script src="/js/05-hr.js"></script>
+<script src="/js/06-finance.js"></script>
+<script src="/js/07-projects.js"></script>
+<script src="/js/08-owner.js"></script>
+<script src="/js/09-employee.js"></script>
+<script src="/js/10-work-reports.js"></script>
+</body>
+</html>

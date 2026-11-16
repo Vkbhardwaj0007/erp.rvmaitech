@@ -1,0 +1,16 @@
+{
+  "name": "business-suite",
+  "version": "1.0.0",
+  "description": "ERP + CRM + HRMS + Finance + Projects in one web dashboard. Plain Node.js with JSON file storage.",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pdfkit": "^0.20.2"
+  }
+}
