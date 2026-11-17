@@ -100,30 +100,33 @@ function buildMimeMessage({ from, to, subject, text, html, attachments = [] }) {
 
   if (html) {
     const altBoundary = '----=_RvmAlt_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const textB64 = Buffer.from(text || '', 'utf8').toString('base64').match(/.{1,76}/g) || [''];
+    const htmlB64 = Buffer.from(html || '', 'utf8').toString('base64').match(/.{1,76}/g) || [''];
     parts.push(
       `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
       '',
       `--${altBoundary}`,
       'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: 7bit',
+      'Content-Transfer-Encoding: base64',
       '',
-      text || '',
+      textB64.join('\r\n'),
       '',
       `--${altBoundary}`,
       'Content-Type: text/html; charset=UTF-8',
-      'Content-Transfer-Encoding: 7bit',
+      'Content-Transfer-Encoding: base64',
       '',
-      html,
+      htmlB64.join('\r\n'),
       '',
       `--${altBoundary}--`,
       ''
     );
   } else {
+    const textB64 = Buffer.from(text || '', 'utf8').toString('base64').match(/.{1,76}/g) || [''];
     parts.push(
       'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: 7bit',
+      'Content-Transfer-Encoding: base64',
       '',
-      text,
+      textB64.join('\r\n'),
       ''
     );
   }
@@ -208,7 +211,7 @@ function sendGmailSmtp({ to, subject, text, body, html, from = SENDER_EMAIL, att
     setTimeout(() => {
       socket.destroy();
       done({ ok: true, sentLive: false, mode: 'timeout' });
-    }, 15000);
+    }, 60000);
   });
 }
 const DATA = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
@@ -627,7 +630,10 @@ route('POST', '/api/employees/:id/credentials', { mod: ['hrms'] }, async ({ req,
   emp.status = 'Registered';
   await store.save();
   const host = req.headers.host || `localhost:${PORT}`;
-  const proto = isHttps(req) || host.includes('render.com') ? 'https' : 'http';
+  let portalUrl = 'https://erp-rvmaitech.onrender.com';
+  if (host && host.includes('render.com')) {
+    portalUrl = `https://${host.replace(/^https?:\/\//, '')}`;
+  }
   send(res, 200, {
     ok: true,
     empId: emp.id,
@@ -635,7 +641,7 @@ route('POST', '/api/employees/:id/credentials', { mod: ['hrms'] }, async ({ req,
     email: emp.email || '',
     loginId,
     tempPassword: tempPass,
-    portalUrl: `${proto}://${host}`
+    portalUrl
   });
 });
 
@@ -643,9 +649,8 @@ route('POST', '/api/employees/:id/send-email', { mod: ['hrms'] }, async ({ req, 
   const emp = findDoc('employees', params.id);
   if (!emp.email) throw new HttpError(400, 'Employee does not have an email address recorded. Please add an email in employee details first.');
   const host = req.headers.host || `localhost:${PORT}`;
-  const proto = isHttps(req) || host.includes('render.com') ? 'https' : 'http';
-  let portalUrl = `${proto}://${host}`;
-  if (host.includes('render.com') || (!host.includes('localhost') && !host.includes('127.0.0.1'))) {
+  let portalUrl = 'https://erp-rvmaitech.onrender.com';
+  if (host && host.includes('render.com')) {
     portalUrl = `https://${host.replace(/^https?:\/\//, '')}`;
   }
 
