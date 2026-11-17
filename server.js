@@ -1365,6 +1365,8 @@ async function handle(req, res) {
     });
     return res.end();
   }
+  const isPublicWebhook = url.pathname === '/api/inquiries' || url.pathname === '/api/public/lead' || url.pathname === '/api/leads/inquiry';
+  const corsHeaders = isPublicWebhook ? { 'Access-Control-Allow-Origin': '*' } : undefined;
   try {
     let params = null;
     const hit = routes.find(r => {
@@ -1376,7 +1378,6 @@ async function handle(req, res) {
       return true;
     });
     if (!hit) throw new HttpError(404, 'Not found.');
-    const isPublicWebhook = url.pathname === '/api/inquiries' || url.pathname === '/api/public/lead' || url.pathname === '/api/leads/inquiry';
     if (req.method !== 'GET' && !isPublicWebhook) {
       /* Only this app's own pages may change data: a custom header plus a same-site check. */
       if (req.headers['x-requested-with'] !== 'fetch') throw new HttpError(403, 'Request refused.');
@@ -1398,10 +1399,10 @@ async function handle(req, res) {
     await hit.handler(ctx);
   } catch (e) {
     if (res.headersSent) { res.destroy(); return; }
-    if (e instanceof HttpError) return send(res, e.status, { error: e.message }, e.status === 413 ? { Connection: 'close' } : undefined);
-    if (e instanceof URIError) return send(res, 400, { error: 'Bad address.' });
+    if (e instanceof HttpError) return send(res, e.status, { error: e.message }, Object.assign({}, corsHeaders, e.status === 413 ? { Connection: 'close' } : undefined));
+    if (e instanceof URIError) return send(res, 400, { error: 'Bad address.' }, corsHeaders);
     console.error('[error]', req.method, url.pathname, e);
-    send(res, 500, { error: 'The server hit a problem. Nothing was saved. Try again.' });
+    send(res, 500, { error: 'The server hit a problem. Nothing was saved. Try again.' }, corsHeaders);
   }
 }
 
