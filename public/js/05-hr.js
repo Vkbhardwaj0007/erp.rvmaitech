@@ -576,6 +576,161 @@ function showCredentialsModal(e, creds) {
 }
 
 /* ================= Recruitment & Hiring Pipeline ================= */
+function showCandidateDossierModal(c) {
+  if (!c) return;
+  dlg.className = 'dlg dlg-wide';
+  const hasResume = !!(c.resumeId || c.resumeUrl);
+  const resumeDownloadUrl = c.resumeId ? `/api/candidates/${encodeURIComponent(c.id)}/resume` : (c.resumeUrl || '#');
+
+  dlg.innerHTML = `
+    <div class="form" style="max-width:880px">
+      <!-- Modal Header -->
+      <div style="border-bottom:1.5px solid var(--rule);padding-bottom:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <h2 class="dlg-title" style="margin:0;font-size:20px;color:var(--heading)">${esc(c.name)}</h2>
+            ${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}
+          </div>
+          <p class="dlg-sub" style="margin:4px 0 0;font-size:13px;color:var(--ink-2)">
+            Applied for: <b style="color:var(--ink)">${esc(c.role || 'General application')}</b> · Department: <b>${esc(c.dept || 'Engineering')}</b> · Source: <b>${esc(c.source || 'Website Careers Form')}</b>
+          </p>
+        </div>
+        <div class="vactions">
+          ${hasResume ? `<a href="${esc(resumeDownloadUrl)}" target="_blank" rel="noopener" class="btn" style="background:#0284c7;color:#fff;font-weight:700">📄 Open Resume PDF</a>` : ''}
+          <button type="button" class="btn btn-outline" data-action="cand-edit" data-id="${esc(c.id)}">✏️ Edit Details</button>
+          <button type="button" class="btn" data-x="cancel">✕ Close</button>
+        </div>
+      </div>
+
+      <!-- Section 1: Personal Details -->
+      <div style="background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:14px 18px;margin-bottom:12px">
+        <h3 style="margin:0 0 10px;font-size:13px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">
+          👤 1. Personal Details
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 16px;font-size:13px">
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Full Legal Name</span><b style="color:var(--ink)">${esc(c.name)}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Email Address</span><b style="color:var(--ink)">${esc(c.email)}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Phone / WhatsApp</span><b style="color:var(--ink)">${esc(c.phone)}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Current Location</span><b style="color:var(--ink)">${esc(c.address || 'Not specified')}</b></div>
+        </div>
+      </div>
+
+      <!-- Section 2: Position & Qualification -->
+      <div style="background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:14px 18px;margin-bottom:12px">
+        <h3 style="margin:0 0 10px;font-size:13px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">
+          🎓 2. Position & Qualification
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 16px;font-size:13px">
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Position Applying For</span><b style="color:var(--ink)">${esc(c.role || 'General application')}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Highest Qualification</span><b style="color:#0284c7">${esc(c.qualification || 'Not specified')}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Total Experience</span><b style="color:var(--ink)">${esc(c.experience || 'Fresher')}</b></div>
+          <div>
+            <span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">LinkedIn / Portfolio</span>
+            ${c.linkedin ? `<a href="${esc(c.linkedin)}" target="_blank" rel="noopener" style="color:#38bdf8;font-weight:700;word-break:break-all">🔗 ${esc(c.linkedin)}</a>` : '<span style="color:var(--ink-2)">Not provided</span>'}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Current Employment & Compensation -->
+      <div style="background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:14px 18px;margin-bottom:12px">
+        <h3 style="margin:0 0 10px;font-size:13px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">
+          💼 3. Current Employment & Compensation
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 16px;font-size:13px">
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Current Company</span><b style="color:var(--ink)">${esc(c.currentCompany || 'Fresher / None')}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Current Designation</span><b style="color:var(--ink)">${esc(c.currentDesignation || '—')}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Current Salary (CTC)</span><b style="color:var(--ink)">${esc(c.currentCtc || '—')}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Expected Salary (CTC)</span><b style="color:#10b981">${esc(c.expectedCtc || inr(c.expectedSalary || 0))}</b></div>
+          <div><span class="sub" style="display:block;font-size:11px;color:var(--ink-2)">Notice Period</span><b style="color:#f59e0b">${esc(c.noticePeriod || 'Immediate')}</b></div>
+        </div>
+      </div>
+
+      <!-- Section 4: Why should we hire you? -->
+      ${c.whyHire || c.notes ? `
+      <div style="background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:14px 18px;margin-bottom:12px">
+        <h3 style="margin:0 0 8px;font-size:13px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">
+          💬 4. Why should we hire you?
+        </h3>
+        <p style="margin:0;font-size:13px;color:var(--ink);line-height:1.6;white-space:pre-wrap;background:rgba(2,132,199,0.05);padding:10px 14px;border-radius:6px;border-left:3px solid #0284c7">
+          ${esc(c.whyHire || c.notes)}
+        </p>
+      </div>` : ''}
+
+      <!-- Section 5: Resume Document -->
+      <div style="background:var(--sheet);border:1.5px solid ${hasResume ? '#0284c7' : 'var(--rule)'};border-radius:10px;padding:16px 18px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin:0 0 4px;font-size:13px;font-weight:800;color:${hasResume ? '#0284c7' : 'var(--ink)'};text-transform:uppercase;letter-spacing:.05em">
+              📄 5. Candidate Resume (PDF / DOC / DOCX)
+            </h3>
+            <div style="font-size:12.5px;color:var(--ink-2)">
+              ${hasResume 
+                ? `<span>Attached File: <b>${esc(c.resumeName || 'Resume.pdf')}</b></span>`
+                : `<span style="color:#f59e0b;font-weight:700">⚠️ No resume document uploaded yet.</span>`}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${hasResume ? `<a href="${esc(resumeDownloadUrl)}" target="_blank" rel="noopener" class="btn" style="background:#0284c7;color:#fff;font-weight:700">📥 View / Download Resume</a>` : ''}
+            <label class="btn btn-outline" style="cursor:pointer;margin:0" title="Upload or replace candidate resume PDF/DOCX">
+              📤 ${hasResume ? 'Replace Resume' : 'Upload Resume'}
+              <input type="file" id="dossierResumeUpload" accept=".pdf,.doc,.docx,.png,.jpg" style="display:none">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 6: Hiring & Onboarding Action Buttons -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1.5px solid var(--rule);padding-top:14px">
+        <div style="font-size:12px;color:var(--ink-2)">
+          Candidate ID: <code>${esc(c.id)}</code> · Applied: <b>${fmtDate(new Date(c.createdAt || Date.now()).toISOString().slice(0,10))}</b>
+        </div>
+        <div class="vactions">
+          ${(c.status === 'Selected' || c.status === 'Offer Sent')
+            ? `<button class="btn" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}">✉️ Send Job Offer (No Password)</button>
+               <button class="btn btn-primary" data-action="cand-convert" data-id="${esc(c.id)}">🚀 Register Employee & Issue Credentials</button>`
+            : c.status === 'Joined / Converted'
+            ? `<span style="font-size:13px;font-weight:800;color:#16a34a">✓ Officially Onboarded as Employee</span>`
+            : `<button class="btn btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 Schedule Interview</button>
+               <button class="btn" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select Candidate</button>`}
+          <button type="button" class="btn" data-x="cancel">Close</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Inline resume file uploader in dossier modal
+  const fileInput = $('#dossierResumeUpload', dlg);
+  if (fileInput) {
+    fileInput.onchange = async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (file.size > 12 * 1024 * 1024) { alert('File is too large (max 12 MB).'); return; }
+      toast('Uploading candidate resume...', 'info');
+      try {
+        const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/resume?name=${encodeURIComponent(file.name)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'x-requested-with': 'fetch'
+          },
+          body: file
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        c.resumeId = data.resumeId;
+        c.resumeName = data.resumeName;
+        toast('Resume uploaded successfully!', 'good');
+        showCandidateDossierModal(c);
+        if (typeof scheduleRender === 'function') scheduleRender();
+      } catch (err) {
+        alert('Resume upload failed: ' + err.message);
+      }
+    };
+  }
+
+  dlg.showModal();
+}
+
 function renderCandidatesTabHtml() {
   const cands = S.candidates || [];
   const applied = cands.filter(c => c.status === 'Applied');
@@ -585,26 +740,34 @@ function renderCandidatesTabHtml() {
   const joined = cands.filter(c => c.status === 'Joined / Converted');
 
   const rows = cands.map(c => `
-    <tr>
+    <tr style="cursor:pointer" onclick="if(!event.target.closest('button,a,input,label')){ACT['cand-view']({dataset:{id:'${esc(c.id)}'}})}">
       <td>
         <b style="font-size:13.5px;color:var(--ink)">${esc(c.name)}</b>
         <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.email)} · ${esc(c.phone)}</div>
         ${c.address ? `<div style="font-size:11px;color:var(--ink-2);margin-top:1px">📍 ${esc(c.address)}</div>` : ''}
       </td>
       <td>
-        <b style="font-size:13px;color:var(--ink)">${esc(c.role || 'Staff')}</b>
-        <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.dept || 'Engineering')}</div>
+        <b style="font-size:13px;color:var(--ink)">${esc(c.role || 'General application')}</b>
+        <div style="font-size:11.5px;color:#0284c7;font-weight:600;margin-top:2px">${esc(c.qualification || c.dept || 'Engineering')}</div>
       </td>
       <td>
         <div><b>${esc(c.experience || 'Fresher')}</b></div>
-        <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${esc(c.source || 'Website')}</div>
+        <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${esc(c.currentCompany || c.source || 'Website')}</div>
       </td>
-      <td class="num"><b style="color:var(--ink)">${inr(c.expectedSalary || 0)}</b></td>
-      <td class="num"><b style="color:#0284c7">${inr(c.offeredSalary || c.expectedSalary || 0)}</b></td>
+      <td>
+        <div style="font-size:12px;color:var(--ink)"><b>Exp:</b> <span style="color:#10b981">${esc(c.expectedCtc || inr(c.expectedSalary || 0))}</span></div>
+        ${c.currentCtc ? `<div style="font-size:11px;color:var(--ink-2)">Cur: ${esc(c.currentCtc)}</div>` : ''}
+      </td>
+      <td>
+        ${(c.resumeId || c.resumeUrl)
+          ? `<a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" title="View Candidate Resume PDF" onclick="event.stopPropagation()">📄 View Resume</a>`
+          : `<label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0" title="Upload Resume" onclick="event.stopPropagation()">+ Upload<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>`}
+      </td>
       <td>${c.interviewDate ? `<span style="font-weight:700">${fmtDate(c.interviewDate)}</span>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
       <td>${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</td>
-      <td class="acts">
+      <td class="acts" onclick="event.stopPropagation()">
         <div class="vactions" style="justify-content:flex-end">
+          <button class="btn btn-sm" style="background:rgba(2,132,199,0.12);color:#0284c7;font-weight:700" data-action="cand-view" data-id="${esc(c.id)}" title="Open Full Candidate Application Dossier">👁️ View</button>
           ${(c.status === 'Selected' || c.status === 'Offer Sent')
             ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
                <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${esc(c.id)}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
@@ -621,10 +784,10 @@ function renderCandidatesTabHtml() {
   const cardsHtml = cands.length === 0 ? empty('No candidates recorded yet', 'Applicants who apply from the company website or walk in for interviews will appear here.', W('hrms', '<button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>')) :
     table([
       'Candidate Name & Contact',
-      'Applied Role & Dept',
-      'Experience & Source',
-      { n: 'Expected' },
-      { n: 'Offered' },
+      'Role & Qualification',
+      'Experience & Company',
+      'Salary (CTC)',
+      'Resume',
       'Interview Date',
       'Hiring Status',
       ''
@@ -650,25 +813,31 @@ function renderCandidatesTabHtml() {
 
 function candidateForm(c) {
   openForm({
-    title: c ? 'Edit Candidate Details' : 'Add Candidate (Interview / Application)',
+    title: c ? 'Edit Candidate Details' : 'Add Candidate (Website Application / Walk-in)',
     wide: true,
-    sub: 'Candidate details enter karein. Interview schedule karein, selection ke baad Offer Letter bhej sakte hain, aur joining ke samay 1-click me Employee register ho jayega.',
+    sub: 'Personal details, qualification, employment history aur resume link enter karein.',
     fields: [
-      { name: 'name', label: 'Candidate Full Name', required: true, placeholder: 'e.g. Vivek Kumar Bhardwaj' },
-      { name: 'role', label: 'Applied Position / Role', required: true, placeholder: 'e.g. IOT Engineer, Sales Manager' },
-      { name: 'email', label: 'Email Address (Offer letter will be sent here)', type: 'email', required: true, placeholder: 'candidate@gmail.com' },
-      { name: 'phone', label: 'Mobile Number', type: 'tel', required: true, placeholder: '+91 7052050656' },
-      { name: 'dept', label: 'Department', placeholder: 'R&D, Operations, Sales, Accounts' },
-      { name: 'experience', label: 'Experience (Years / Fresher)', placeholder: 'e.g. 2 Years, Fresher' },
-      { name: 'currentCompany', label: 'Current / Previous Company', placeholder: 'e.g. Tech Solutions Pvt Ltd' },
-      { name: 'expectedSalary', label: 'Candidate Expected Gross Salary / Mo (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 30000' },
-      { name: 'offeredSalary', label: 'Company Offered Gross Salary / Mo (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 25000' },
+      { name: 'name', label: 'Full Name', required: true, placeholder: 'Your full name' },
+      { name: 'email', label: 'Email Address', type: 'email', required: true, placeholder: 'you@example.com' },
+      { name: 'phone', label: 'Phone / WhatsApp', type: 'tel', required: true, placeholder: '+91 …' },
+      { name: 'address', label: 'Current Location', placeholder: 'City, State' },
+      { name: 'role', label: 'Position applying for', required: true, placeholder: 'e.g. Automation Engineer, IOT Engineer' },
+      { name: 'dept', label: 'Department', placeholder: 'R&D, Operations, IT, Sales' },
+      { name: 'qualification', label: 'Highest Qualification', required: true, placeholder: 'e.g. B.Tech (Electronics), Diploma, MCA' },
+      { name: 'experience', label: 'Total Experience (years)', placeholder: 'e.g. 3.5 (0 for fresher)' },
+      { name: 'linkedin', label: 'LinkedIn / Portfolio URL (optional)', placeholder: 'https://' },
+      { name: 'currentCompany', label: 'Current Company', placeholder: "Company name (or 'Fresher')" },
+      { name: 'currentDesignation', label: 'Current Designation', placeholder: 'e.g. Automation Engineer' },
+      { name: 'currentCtc', label: 'Current Salary (CTC)', placeholder: 'e.g. ₹4.5 LPA' },
+      { name: 'expectedCtc', label: 'Expected Salary (CTC)', placeholder: 'e.g. ₹6 LPA' },
+      { name: 'noticePeriod', label: 'Notice Period', type: 'select', options: ['Immediate', '15 Days', '30 Days', '60 Days', '90 Days'], value: c ? c.noticePeriod : 'Immediate' },
+      { name: 'whyHire', label: 'Why should we hire you? (optional)', type: 'textarea', rows: 3, placeholder: 'Candidate brief or reason to hire...' },
+      { name: 'resumeUrl', label: 'Resume Link / Google Drive URL (optional)', placeholder: 'https://' },
+      { name: 'status', label: 'Hiring Status', type: 'select', options: ['Applied', 'Interview Scheduled', 'Interview Conducted', 'Selected', 'Offer Sent', 'Joined / Converted', 'Rejected', 'On Hold'], value: c ? c.status : 'Applied' },
       { name: 'interviewDate', label: 'Interview Date', type: 'date' },
       { name: 'joiningDate', label: 'Expected Date of Joining', type: 'date' },
-      { name: 'status', label: 'Hiring Status', type: 'select', options: ['Applied', 'Interview Scheduled', 'Interview Conducted', 'Selected', 'Offer Sent', 'Joined / Converted', 'Rejected', 'On Hold'], value: c ? c.status : 'Applied' },
-      { name: 'source', label: 'Source', placeholder: 'Website Careers, Walk-in, Referral, LinkedIn' },
-      { name: 'address', label: 'Address / Location', type: 'textarea', rows: 2 },
-      { name: 'notes', label: 'Interview Feedback / HR Remarks', type: 'textarea', rows: 2 }
+      { name: 'offeredSalary', label: 'Company Offered Monthly Gross (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 25000' },
+      { name: 'source', label: 'Source', placeholder: 'Website Careers Form, Walk-in, Referral, LinkedIn' }
     ],
     values: c || {},
     onSubmit: async v => {
@@ -1122,6 +1291,38 @@ ACT['emp-creds'] = async el => {
 
 /* Candidate Hiring & Interview Pipeline Actions */
 ACT['cand-new'] = () => candidateForm(null);
+ACT['cand-view'] = el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (c) showCandidateDossierModal(c);
+};
+ACT['cand-upload-resume'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.doc,.docx,.png,.jpg';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    toast('Uploading candidate resume...', 'info');
+    try {
+      const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/resume?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-requested-with': 'fetch' },
+        body: file
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      c.resumeId = data.resumeId;
+      c.resumeName = data.resumeName;
+      toast('Resume uploaded successfully!', 'good');
+      if (typeof scheduleRender === 'function') scheduleRender();
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    }
+  };
+  input.click();
+};
 ACT['cand-edit'] = el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);
   if (c) candidateForm(c);
@@ -1194,6 +1395,31 @@ ACT['cand-convert'] = async el => {
     alert('Error registering employee: ' + err.message);
   }
 };
+
+document.addEventListener('change', async ev => {
+  const target = ev.target;
+  if (target && target.dataset && target.dataset.uploadCandResume) {
+    const candId = target.dataset.uploadCandResume;
+    const file = target.files && target.files[0];
+    if (!file) return;
+    const c = (S.candidates || []).find(x => x.id === candId);
+    toast('Uploading candidate resume...', 'info');
+    try {
+      const res = await fetch(`/api/candidates/${encodeURIComponent(candId)}/resume?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-requested-with': 'fetch' },
+        body: file
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      if (c) { c.resumeId = data.resumeId; c.resumeName = data.resumeName; }
+      toast('Resume uploaded successfully!', 'good');
+      if (typeof scheduleRender === 'function') scheduleRender();
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    }
+  }
+});
 
 /* ---- one employee: photo, details, ID proof and documents ---- */
 function profileView(D, e) {

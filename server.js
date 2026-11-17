@@ -969,12 +969,58 @@ Cyber City, Mansarovar, Jaipur, Rajasthan - 302020
 /* ---------------- Recruitment & Candidate Hiring Endpoints ---------------- */
 route('POST', '/api/careers/apply', { open: true }, async ({ req, res }) => {
   const b = await readJson(req);
-  const name = String(b.name || '').trim().slice(0, 120);
+  const name = String(b.name || b.fullName || '').trim().slice(0, 120);
   const email = String(b.email || '').trim().slice(0, 120);
-  const phone = String(b.phone || '').trim().slice(0, 30);
-  const role = String(b.role || b.position || 'Staff').trim().slice(0, 80);
+  const phone = String(b.phone || b.whatsapp || '').trim().slice(0, 30);
+  const role = String(b.role || b.position || 'General application').trim().slice(0, 80);
   if (!name || !email || !phone) throw new HttpError(400, 'Name, email and phone number are required.');
-  
+
+  // Handle uploaded base64 resume if present
+  let resumeId = '';
+  let resumeName = String(b.resumeName || b.fileName || 'Resume.pdf').replace(/[\u0000-\u001F\u007F"\\/:*?<>|]/g, '').trim().slice(0, 150) || 'Resume.pdf';
+  if (b.resumeData || b.resumeBase64 || b.resume) {
+    try {
+      const rawData = String(b.resumeData || b.resumeBase64 || b.resume);
+      const base64Str = rawData.includes('base64,') ? rawData.split('base64,')[1] : rawData;
+      const buf = Buffer.from(base64Str, 'base64');
+      if (buf.length > 0 && buf.length <= 12 * 1024 * 1024) {
+        resumeId = newId('f');
+        let ext = 'pdf';
+        let mime = 'application/pdf';
+        const lower = resumeName.toLowerCase();
+        if (lower.endsWith('.docx')) { ext = 'docx'; mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
+        else if (lower.endsWith('.doc')) { ext = 'doc'; mime = 'application/msword'; }
+        else if (lower.endsWith('.png')) { ext = 'png'; mime = 'image/png'; }
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) { ext = 'jpg'; mime = 'image/jpeg'; }
+        const stored = resumeId + '.' + ext;
+        await fsp.writeFile(path.join(UPLOADS, stored), buf);
+        db().files = db().files || [];
+        db().files.push({
+          id: resumeId,
+          kind: 'Resume',
+          name: resumeName,
+          mime,
+          size: buf.length,
+          stored,
+          uploadedAt: Date.now()
+        });
+      }
+    } catch (err) {
+      console.error('[apply] Failed to save resume buffer:', err);
+    }
+  }
+
+  // Parse salary / CTC
+  let expSalaryNum = Number(b.expectedSalary || 0);
+  if (!expSalaryNum && (b.expectedCtc || b.expectedSalary)) {
+    const rawCtc = String(b.expectedCtc || b.expectedSalary || '');
+    const m = rawCtc.match(/(\d+(\.\d+)?)/);
+    if (m) {
+      const val = parseFloat(m[1]);
+      expSalaryNum = rawCtc.toLowerCase().includes('lpa') ? Math.round((val * 100000) / 12) : Math.round(val);
+    }
+  }
+
   db().candidates = db().candidates || [];
   const cand = {
     id: newId('cand'),
@@ -983,21 +1029,106 @@ route('POST', '/api/careers/apply', { open: true }, async ({ req, res }) => {
     phone,
     role,
     dept: String(b.dept || b.department || 'Engineering').trim().slice(0, 60),
-    experience: String(b.experience || 'Fresher').trim().slice(0, 60),
+    qualification: String(b.qualification || b.highestQualification || '').trim().slice(0, 120),
+    experience: String(b.experience || b.totalExperience || 'Fresher').trim().slice(0, 60),
+    linkedin: String(b.linkedin || b.portfolio || b.portfolioUrl || '').trim().slice(0, 250),
     currentCompany: String(b.currentCompany || '').trim().slice(0, 120),
-    expectedSalary: Number(b.expectedSalary || 0),
-    offeredSalary: Number(b.offeredSalary || b.expectedSalary || 0),
+    currentDesignation: String(b.currentDesignation || b.currentRole || '').trim().slice(0, 120),
+    currentCtc: String(b.currentCtc || b.currentSalary || '').trim().slice(0, 60),
+    expectedCtc: String(b.expectedCtc || (expSalaryNum ? `₹${(expSalaryNum * 12 / 100000).toFixed(1)} LPA` : '')).trim().slice(0, 60),
+    expectedSalary: expSalaryNum,
+    offeredSalary: Number(b.offeredSalary || expSalaryNum || 0),
+    noticePeriod: String(b.noticePeriod || '').trim().slice(0, 60),
+    whyHire: String(b.whyHire || b.whyShouldWeHireYou || b.coverLetter || '').trim().slice(0, 2000),
+    resumeId,
+    resumeName: resumeId ? resumeName : (b.resumeName || ''),
+    resumeUrl: String(b.resumeUrl || '').trim().slice(0, 500),
     interviewDate: String(b.interviewDate || '').trim(),
     joiningDate: String(b.joiningDate || '').trim(),
     status: 'Applied',
     source: String(b.source || 'Website Careers Form').trim().slice(0, 60),
-    notes: String(b.notes || b.message || 'Applied via website careers form').trim().slice(0, 1000),
-    address: String(b.address || '').trim().slice(0, 300),
+    notes: String(b.notes || b.message || b.whyHire || 'Applied via website careers form').trim().slice(0, 1000),
+    address: String(b.address || b.location || b.currentLocation || '').trim().slice(0, 300),
     createdAt: Date.now()
   };
   db().candidates.push(cand);
   await store.save();
   send(res, 201, { ok: true, id: cand.id, message: 'Application submitted successfully! Our HR team will contact you.' });
+});
+
+/* Serve candidate resume file directly (inline view/download) */
+route('GET', '/api/candidates/:id/resume', { open: true }, async ({ req, res, params }) => {
+  db().candidates = db().candidates || [];
+  const cand = db().candidates.find(c => c.id === params.id);
+  if (!cand) throw new HttpError(404, 'Candidate not found.');
+
+  // If candidate has an external resume URL (e.g. Google Drive), redirect
+  if (cand.resumeUrl && !cand.resumeId) {
+    res.writeHead(302, { Location: cand.resumeUrl });
+    return res.end();
+  }
+
+  const f = db().files && db().files.find(x => x.id === cand.resumeId);
+  if (!f) throw new HttpError(404, 'No resume document has been uploaded for this candidate yet.');
+  const full = path.join(UPLOADS, f.stored);
+  if (!fs.existsSync(full)) throw new HttpError(404, 'Resume file not found on disk.');
+
+  res.removeHeader('Content-Security-Policy');
+  res.writeHead(200, {
+    'Content-Type': f.mime || 'application/pdf',
+    'Content-Length': fs.statSync(full).size,
+    'Cache-Control': 'private, max-age=600',
+    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.name || 'Resume.pdf')}`
+  });
+  fs.createReadStream(full).pipe(res);
+});
+
+/* Upload or replace candidate resume from HRMS */
+route('POST', '/api/candidates/:id/resume', { mod: ['hrms'] }, async ({ req, res, user, params, query }) => {
+  db().candidates = db().candidates || [];
+  const cand = db().candidates.find(c => c.id === params.id);
+  if (!cand) throw new HttpError(404, 'Candidate not found.');
+
+  const buf = await readBody(req, 12 * 1024 * 1024, 'Resume file');
+  let type = sniff(buf);
+  let ext = 'pdf', mime = 'application/pdf';
+  const name = String(query.get('name') || 'Resume.pdf').replace(/[\u0000-\u001F\u007F"\\/:*?<>|]/g, '').trim().slice(0, 150) || 'Resume.pdf';
+  const lower = name.toLowerCase();
+
+  if (type) {
+    mime = type[0];
+    ext = type[1];
+  } else if (lower.endsWith('.docx')) {
+    ext = 'docx'; mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  } else if (lower.endsWith('.doc')) {
+    ext = 'doc'; mime = 'application/msword';
+  } else if (lower.endsWith('.pdf')) {
+    ext = 'pdf'; mime = 'application/pdf';
+  } else {
+    throw new HttpError(415, 'Only PDF, DOC or DOCX files can be uploaded as resume.');
+  }
+
+  const id = newId('f');
+  const stored = id + '.' + ext;
+  await fsp.writeFile(path.join(UPLOADS, stored), buf);
+
+  db().files = db().files || [];
+  db().files.push({
+    id,
+    kind: 'Resume',
+    name,
+    mime,
+    size: buf.length,
+    stored,
+    uploadedAt: Date.now(),
+    uploadedBy: user.id
+  });
+
+  cand.resumeId = id;
+  cand.resumeName = name;
+  await store.save();
+
+  send(res, 201, { ok: true, resumeId: id, resumeName: name });
 });
 
 route('POST', '/api/candidates/:id/send-offer', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
