@@ -58,7 +58,7 @@ window.inrWords = inrWords;
 class UserError extends Error {}
 
 /* ================= state ================= */
-const LISTS = ['products', 'customers', 'leads', 'invoices', 'quotations', 'proformas', 'purchases', 'issues', 'employees', 'leaves', 'projects', 'expenses', 'files', 'users', 'worklogs', 'tasks'];
+const LISTS = ['products', 'customers', 'leads', 'invoices', 'quotations', 'proformas', 'purchases', 'issues', 'employees', 'leaves', 'projects', 'expenses', 'files', 'users', 'worklogs', 'tasks', 'candidates'];
 const STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
 const OPEN_STAGES = ['New', 'Contacted', 'Qualified', 'Proposal'];
 const SOURCES = ['Referral', 'Website', 'Walk-in', 'Phone call', 'Exhibition', 'Social media', 'Other'];

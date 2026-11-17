@@ -575,6 +575,123 @@ function showCredentialsModal(e, creds) {
   showRegistrationSuccessModal(e, creds, null);
 }
 
+/* ================= Recruitment & Hiring Pipeline ================= */
+function renderCandidatesTabHtml() {
+  const cands = S.candidates || [];
+  const applied = cands.filter(c => c.status === 'Applied');
+  const interview = cands.filter(c => c.status === 'Interview Scheduled' || c.status === 'Interview Conducted');
+  const selected = cands.filter(c => c.status === 'Selected');
+  const offerSent = cands.filter(c => c.status === 'Offer Sent');
+  const joined = cands.filter(c => c.status === 'Joined / Converted');
+
+  const cardsHtml = cands.length === 0 ? empty('No candidates recorded yet', 'Applicants who apply from the company website or walk in for interviews will appear here.', W('hrms', '<button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>')) :
+    table([
+      'Candidate Name & Contact',
+      'Applied Role & Dept',
+      'Experience & Source',
+      { n: 'Expected' },
+      { n: 'Offered' },
+      'Interview Date',
+      'Hiring Status',
+      ''
+    ], cands.map(c => [
+      `<div><b>${esc(c.name)}</b><div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.email)} · ${esc(c.phone)}</div></div>`,
+      `<div><b>${esc(c.role || 'Staff')}</b><div style="font-size:11.5px;color:var(--ink-2)">${esc(c.dept || 'Engineering')}</div></div>`,
+      `<div>${esc(c.experience || 'Fresher')}<div style="font-size:11px;color:var(--ink-2)">${esc(c.source || 'Website')}</div></div>`,
+      inr(c.expectedSalary || 0),
+      inr(c.offeredSalary || c.expectedSalary || 0),
+      c.interviewDate ? fmtDate(c.interviewDate) : '<span style="color:var(--ink-2)">Not set</span>',
+      stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn'),
+      `<div class="vactions" style="justify-content:flex-end">
+        ${(c.status === 'Selected' || c.status === 'Offer Sent')
+          ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${c.id}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
+             <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${c.id}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
+          : c.status === 'Joined / Converted'
+          ? `<span style="font-size:11.5px;font-weight:700;color:#16a34a">✓ Onboarded</span>`
+          : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${c.id}">📅 Interview</button>
+             <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${c.id}">✓ Select</button>`}
+        <button class="btn btn-sm btn-outline" data-action="cand-edit" data-id="${c.id}">Edit</button>
+      </div>`
+    ]));
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0 16px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="tile" style="padding:10px 16px"><span class="sub">Total Applicants</span><b>${cands.length}</b></div>
+        <div class="tile" style="padding:10px 16px"><span class="sub">Applied</span><b style="color:#f59e0b">${applied.length}</b></div>
+        <div class="tile" style="padding:10px 16px"><span class="sub">Interviewing</span><b style="color:#0284c7">${interview.length}</b></div>
+        <div class="tile" style="padding:10px 16px"><span class="sub">Selected / Offer</span><b style="color:#10b981">${selected.length + offerSent.length}</b></div>
+        <div class="tile" style="padding:10px 16px"><span class="sub">Joined (Employees)</span><b style="color:#059669">${joined.length}</b></div>
+      </div>
+      <div>
+        <button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>
+      </div>
+    </div>
+
+    <!-- Career Form Integration Snippet for Website -->
+    <div style="background:linear-gradient(135deg, rgba(13,38,73,0.95), rgba(18,58,114,0.95));border:1px solid #0284c7;border-radius:10px;padding:14px 18px;margin-bottom:18px;color:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:800;color:#38bdf8">🌐 Website Careers Form Integration (Automated Candidates Ingestion)</div>
+        <span class="stamp stamp-good" style="font-size:11px">API Live</span>
+      </div>
+      <p style="font-size:12px;color:#cbd5e1;margin:0 0 8px">
+        Apni website ke Careers / Apply page se candidates ka data direct yahan bhejne ke liye ye code use karein:
+      </p>
+      <pre style="background:#051429;border:1px solid #1e3a5f;padding:10px;border-radius:6px;font-size:11.5px;color:#7dd3fc;overflow-x:auto;margin:0">await fetch('https://erp-rvmaitech.onrender.com/api/careers/apply', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Candidate Full Name',
+    email: 'candidate@example.com',
+    phone: '+91 9876543210',
+    role: 'Embedded IoT / Automation Engineer',
+    dept: 'R&D',
+    experience: '2 Years',
+    expectedSalary: 30000,
+    source: 'Website Careers Page'
+  })
+});</pre>
+    </div>
+
+    ${cardsHtml}
+  `;
+}
+
+function candidateForm(c) {
+  openForm({
+    title: c ? 'Edit Candidate Details' : 'Add Candidate (Interview / Application)',
+    wide: true,
+    sub: 'Candidate details enter karein. Interview schedule karein, selection ke baad Offer Letter bhej sakte hain, aur joining ke samay 1-click me Employee register ho jayega.',
+    fields: [
+      { name: 'name', label: 'Candidate Full Name', required: true, placeholder: 'e.g. Vivek Kumar Bhardwaj' },
+      { name: 'role', label: 'Applied Position / Role', required: true, placeholder: 'e.g. IOT Engineer, Sales Manager' },
+      { name: 'email', label: 'Email Address (Offer letter will be sent here)', type: 'email', required: true, placeholder: 'candidate@gmail.com' },
+      { name: 'phone', label: 'Mobile Number', type: 'tel', required: true, placeholder: '+91 7052050656' },
+      { name: 'dept', label: 'Department', placeholder: 'R&D, Operations, Sales, Accounts' },
+      { name: 'experience', label: 'Experience (Years / Fresher)', placeholder: 'e.g. 2 Years, Fresher' },
+      { name: 'currentCompany', label: 'Current / Previous Company', placeholder: 'e.g. Tech Solutions Pvt Ltd' },
+      { name: 'expectedSalary', label: 'Candidate Expected Gross Salary / Mo (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 30000' },
+      { name: 'offeredSalary', label: 'Company Offered Gross Salary / Mo (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 25000' },
+      { name: 'interviewDate', label: 'Interview Date', type: 'date' },
+      { name: 'joiningDate', label: 'Expected Date of Joining', type: 'date' },
+      { name: 'status', label: 'Hiring Status', type: 'select', options: ['Applied', 'Interview Scheduled', 'Interview Conducted', 'Selected', 'Offer Sent', 'Joined / Converted', 'Rejected', 'On Hold'], value: c ? c.status : 'Applied' },
+      { name: 'source', label: 'Source', placeholder: 'Website Careers, Walk-in, Referral, LinkedIn' },
+      { name: 'address', label: 'Address / Location', type: 'textarea', rows: 2 },
+      { name: 'notes', label: 'Interview Feedback / HR Remarks', type: 'textarea', rows: 2 }
+    ],
+    values: c || {},
+    onSubmit: async v => {
+      if (c) {
+        await dbUpdate('candidates', c.id, v);
+        toast('Candidate details updated');
+      } else {
+        await dbAdd('candidates', v);
+        toast('Candidate added to hiring pipeline!', 'good');
+      }
+    }
+  });
+}
+
 function showIdCardModal(e) {
   dlg.className = 'dlg dlg-wide';
   dlg.innerHTML = `
@@ -856,6 +973,7 @@ V['hr-employees'] = D => {
         <button class="tab-btn${tab === 'all' ? ' active' : ''}" data-action="emp-tab" data-tab="all">All Employees (${S.employees.length})</button>
         <button class="tab-btn${tab === 'registered' ? ' active' : ''}" data-action="emp-tab" data-tab="registered">Registered / Onboarding (${registeredCount})</button>
         <button class="tab-btn${tab === 'active' ? ' active' : ''}" data-action="emp-tab" data-tab="active">Active Staff (${act.length})</button>
+        <button class="tab-btn${tab === 'candidates' ? ' active' : ''}" data-action="emp-tab" data-tab="candidates">🎯 Candidates & Interviews (${(S.candidates || []).length})</button>
       </div>`
     + (tab === 'departments'
         ? `<div style="margin:10px 0 16px;font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:8px">
@@ -863,6 +981,8 @@ V['hr-employees'] = D => {
              <span><b>7 Department Cards:</b> Department card pe click karke us department ke sabhi employees aur unki salary dekh sakte hain.</span>
            </div>
            <div class="dept-cards-grid">${hrDeptCardsHtml}</div>`
+        : tab === 'candidates'
+        ? renderCandidatesTabHtml()
         : `<div class="toolbar">${searchBox('hr-employees', 'Search name, code, role, phone or email')}${filterSel('dept', 'All departments', depts)}</div>`
           + (f ? `<div style="background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.35);border-radius:8px;padding:9px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
                     <div><b>Filtered by Department:</b> <span style="color:#38bdf8;font-weight:700">${esc(f)}</span> (${rows.length} Employees)</div>
@@ -1000,6 +1120,81 @@ ACT['emp-creds'] = async el => {
     showRegistrationSuccessModal(e, creds, null);
   } catch (err) {
     showRegistrationSuccessModal(e, null, null);
+  }
+};
+
+/* Candidate Hiring & Interview Pipeline Actions */
+ACT['cand-new'] = () => candidateForm(null);
+ACT['cand-edit'] = el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (c) candidateForm(c);
+};
+ACT['cand-schedule'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  const d = prompt('Interview Date & Time enter karein (YYYY-MM-DD HH:MM):', c.interviewDate || today());
+  if (d) {
+    await dbUpdate('candidates', c.id, { interviewDate: d, status: 'Interview Scheduled' });
+    toast('Interview scheduled for ' + c.name, 'good');
+  }
+};
+ACT['cand-select'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  const offered = prompt(`Candidate ${c.name} ke liye Monthly Gross Salary (₹) confirm karein:`, c.offeredSalary || c.expectedSalary || '25000');
+  if (offered === null) return;
+  await dbUpdate('candidates', c.id, {
+    offeredSalary: Number(offered) || c.expectedSalary || 25000,
+    status: 'Selected'
+  });
+  toast(`Candidate ${c.name} Selected! Ab aap "Send Job Offer" bhej sakte hain.`, 'good');
+};
+ACT['cand-reject'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  if (await confirmBox('Reject Candidate?', `${c.name} ko reject mark karna chahte hain?`)) {
+    await dbUpdate('candidates', c.id, { status: 'Rejected' });
+    toast('Candidate status updated to Rejected');
+  }
+};
+ACT['cand-send-offer'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  const email = c.email;
+  if (!email) { alert('Candidate email missing!'); return; }
+  if (!await confirmBox('Send Job Offer & Joining Form?', `Selected candidate ${c.name} (${email}) ko official Offer Letter & Joining Form bhejna hai?\n\n(Note: Portal login password isme nahi jayega - login credentials kewal tab generate honge jab candidate company me aakar officially HRMS me Register hoga.)`)) return;
+  try {
+    toast('Generating Offer Letter & Joining Form PDFs and dispatching email...', 'info');
+    const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/send-offer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send offer');
+    await dbUpdate('candidates', c.id, { status: 'Offer Sent', offerSentAt: new Date().toISOString() });
+    alert(`🎉 Offer Letter & Joining Form dispatched successfully to ${email}!\n\nCandidate has received official job offer letter with 8-hour shift breakdown, salary structure, and comprehensive joining form.`);
+  } catch (err) {
+    alert('Error sending offer: ' + err.message);
+  }
+};
+ACT['cand-convert'] = async el => {
+  const c = (S.candidates || []).find(x => x.id === el.dataset.id);
+  if (!c) return;
+  if (!await confirmBox('Register Candidate as Company Employee?', `Candidate ${c.name} ne company join kar liya hai?\n\nHRMS Employee code generate hoga, Portal Login ID aur Temporary Password automatically banega aur candidate ke email (${c.email}) par direct welcome email send hoga.`)) return;
+  try {
+    toast('Registering employee and generating portal credentials...', 'info');
+    const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/convert-to-employee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to convert to employee');
+    if (typeof loadInitialData === 'function') await loadInitialData();
+    showRegistrationSuccessModal(data.emp, data.creds, { sentLive: data.sentLive });
+  } catch (err) {
+    alert('Error registering employee: ' + err.message);
   }
 };
 
