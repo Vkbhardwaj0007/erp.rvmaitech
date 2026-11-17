@@ -413,10 +413,13 @@ window.showJoiningLetterModal = showJoiningLetterModal;
 /* Registration Success & Documents Modal */
 function showRegistrationSuccessModal(e, creds, emailRes) {
   dlg.className = 'dlg dlg-wide';
-  const loginUrl = (creds && creds.portalUrl) || location.origin;
+  let loginUrl = (creds && creds.portalUrl) || location.origin;
+  if (loginUrl.includes('render.com') || (!loginUrl.includes('localhost') && !loginUrl.includes('127.0.0.1'))) {
+    loginUrl = loginUrl.replace(/^http:\/\//, 'https://');
+  }
   const loginId = (creds && creds.loginId) || e.userLoginId || (e.code ? e.code.toLowerCase().replace(/[^a-z0-9]/g, '') : 'emp');
   const pass = (creds && creds.tempPassword) || e.tempPassword || 'Check with HR';
-  const companyName = (S.company && S.company.name) || 'RvmAiTech';
+  const companyName = (S.company && S.company.name) || 'RvmAiTech Solutions Private Limited';
 
   const isLiveSent = emailRes && emailRes.sentLive;
   const fullEmailText = `Namaste ${e.name},

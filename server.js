@@ -40,10 +40,43 @@ const SENDER_EMAIL = process.env.SENDER_EMAIL || 'rvmaitech2026@gmail.com';
 const DEFAULT_GMAIL_PASS = 'mqfhtctvjokndqjp';
 const pdfGen = require('./lib/pdfGenerator');
 
-function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${dt.getDate()} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+
+function buildMimeMessage({ from, to, subject, text, html, attachments = [] }) {
   if (!attachments || !attachments.length) {
+    if (html) {
+      const altBoundary = '----=_RvmAlt_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      return [
+        `From: "RvmAiTech Solutions" <${from}>`,
+        `To: <${to}>`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        '',
+        `--${altBoundary}`,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        text || '',
+        '',
+        `--${altBoundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        html,
+        '',
+        `--${altBoundary}--`,
+        '.'
+      ].join('\r\n');
+    }
     return [
-      `From: "RvmAiTech" <${from}>`,
+      `From: "RvmAiTech Solutions" <${from}>`,
       `To: <${to}>`,
       `Subject: ${subject}`,
       'MIME-Version: 1.0',
@@ -54,21 +87,46 @@ function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
     ].join('\r\n');
   }
 
-  const boundary = '----=_RvmAiTech_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  const mixedBoundary = '----=_RvmMixed_' + Date.now() + '_' + Math.random().toString(36).slice(2);
   const parts = [
-    `From: "RvmAiTech" <${from}>`,
+    `From: "RvmAiTech Solutions" <${from}>`,
     `To: <${to}>`,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
     '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: 7bit',
-    '',
-    text,
-    ''
+    `--${mixedBoundary}`
   ];
+
+  if (html) {
+    const altBoundary = '----=_RvmAlt_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    parts.push(
+      `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+      '',
+      `--${altBoundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      text || '',
+      '',
+      `--${altBoundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      html,
+      '',
+      `--${altBoundary}--`,
+      ''
+    );
+  } else {
+    parts.push(
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      text,
+      ''
+    );
+  }
 
   for (const att of attachments) {
     const fn = att.filename || 'document.pdf';
@@ -77,7 +135,7 @@ function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
     const b64 = buf.toString('base64');
     const chunks = b64.match(/.{1,76}/g) || [b64];
 
-    parts.push(`--${boundary}`);
+    parts.push(`--${mixedBoundary}`);
     parts.push(`Content-Type: ${ct}; name="${fn}"`);
     parts.push(`Content-Disposition: attachment; filename="${fn}"`);
     parts.push('Content-Transfer-Encoding: base64');
@@ -86,12 +144,12 @@ function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
     parts.push('');
   }
 
-  parts.push(`--${boundary}--`);
+  parts.push(`--${mixedBoundary}--`);
   parts.push('.');
   return parts.join('\r\n');
 }
 
-function sendGmailSmtp({ to, subject, text, body, from = SENDER_EMAIL, attachments = [] }) {
+function sendGmailSmtp({ to, subject, text, body, html, from = SENDER_EMAIL, attachments = [] }) {
   const pass = (process.env.GMAIL_PASS || process.env.SMTP_PASS || (db().company && db().company.emailPass) || (db().company && db().company.smtpPass) || DEFAULT_GMAIL_PASS || '').replace(/\s+/g, '');
   const msgText = text || body || '';
   if (!pass) return Promise.resolve({ ok: false, sentLive: false, error: 'No Gmail App Password configured', mode: 'logged' });
@@ -136,7 +194,7 @@ function sendGmailSmtp({ to, subject, text, body, from = SENDER_EMAIL, attachmen
         sendLine('DATA');
       } else if (step === 7 && code === 354) {
         step++;
-        const mimeMsg = buildMimeMessage({ from, to, subject, text: msgText, attachments });
+        const mimeMsg = buildMimeMessage({ from, to, subject, text: msgText, html, attachments });
         if (socket.writable) socket.write(mimeMsg + '\r\n');
       } else if (step === 8 && code === 250) {
         step++;
@@ -586,75 +644,258 @@ route('POST', '/api/employees/:id/send-email', { mod: ['hrms'] }, async ({ req, 
   if (!emp.email) throw new HttpError(400, 'Employee does not have an email address recorded. Please add an email in employee details first.');
   const host = req.headers.host || `localhost:${PORT}`;
   const proto = isHttps(req) || host.includes('render.com') ? 'https' : 'http';
-  const portalUrl = `${proto}://${host}`;
-  const loginId = emp.userLoginId || (emp.code ? emp.code.toLowerCase().replace(/[^a-z0-9]/g, '') : 'emp');
-  const tempPass = emp.tempPassword || 'Check with HR';
-  const companyName = db().company.name || 'RvmAiTech';
+  let portalUrl = `${proto}://${host}`;
+  if (host.includes('render.com') || (!host.includes('localhost') && !host.includes('127.0.0.1'))) {
+    portalUrl = `https://${host.replace(/^https?:\/\//, '')}`;
+  }
 
+  // Ensure guaranteed login ID and temporary password
+  const loginId = emp.userLoginId || (emp.code ? emp.code.toLowerCase().replace(/[^a-z0-9]/g, '') : 'emp');
+  let tempPass = emp.tempPassword;
+  let userAccount = db().users.find(x => x.empId === emp.id || x.loginId === loginId);
+  if (!tempPass || tempPass === 'Check with HR' || !userAccount) {
+    tempPass = Math.random().toString(36).slice(2, 6) + '-' + Math.random().toString(36).slice(2, 6) + '-' + Math.random().toString(36).slice(2, 6);
+    emp.tempPassword = tempPass;
+    emp.userLoginId = loginId;
+    emp.status = 'Registered';
+    const passHash = hashPass(tempPass);
+    if (!userAccount) {
+      userAccount = {
+        id: newId('u'),
+        name: emp.name,
+        loginId,
+        role: 'employee',
+        empId: emp.id,
+        modules: ['employee'],
+        active: true,
+        passHash,
+        createdAt: Date.now()
+      };
+      db().users.push(userAccount);
+    } else {
+      userAccount.passHash = passHash;
+      userAccount.active = true;
+      userAccount.role = 'employee';
+      userAccount.empId = emp.id;
+      userAccount.loginId = loginId;
+    }
+    await store.save();
+  }
+
+  const companyName = db().company.name || 'RvmAiTech Solutions Private Limited';
   const basic = Math.round(Number(emp.salary || 0) * 0.5);
   const hra = Math.round(Number(emp.salary || 0) * 0.3);
   const allowance = Math.max(0, Number(emp.salary || 0) - basic - hra);
   const annualCtc = Number(emp.salary || 0) * 12;
   const year = new Date().getFullYear();
 
-  const subject = `Welcome to ${companyName} - Employment Offer Letter & Joining Confirmation (${emp.code || emp.name})`;
-  const bodyText = `Dear ${emp.name},
+  const cleanCode = (emp.code || 'EMP').replace(/[^a-zA-Z0-9_-]/g, '');
+  const offerFileName = `Offer_Letter_${cleanCode}.pdf`;
+  const joinFileName = `Joining_Letter_${cleanCode}.pdf`;
+  const idCardFileName = `Employee_ID_Card_${cleanCode}.pdf`;
 
-Congratulations! We are delighted to welcome you to the ${companyName} team.
-Your employee registration is complete, and your official Offer Letter, Joining Confirmation, and Employee Portal login details are provided below.
+  const offerUrl = `${portalUrl}/api/pdf/offer-letter/${emp.id}`;
+  const joinUrl = `${portalUrl}/api/pdf/joining-letter/${emp.id}`;
+  const idCardUrl = `${portalUrl}/api/pdf/id-card/${emp.id}`;
+
+  const subject = `Welcome to ${companyName} - Employment Offer Letter & Portal Login (${emp.code || emp.name})`;
+
+  const bodyText = `Namaste ${emp.name},
+
+Congratulations! We are delighted to welcome you to RvmAiTech Solutions Private Limited.
+Your employee registration is complete. Your official Employee Self-Service (ESS) Portal login details and attached onboarding letters are provided below:
 
 ============================================================
-1. OFFICIAL OFFER LETTER
+🔑 YOUR EMPLOYEE PORTAL CREDENTIALS
 ============================================================
-Reference No: RAT/OFFER/${year}/${emp.code || 'EMP'}
-Date: ${today()}
+Portal Website:       ${portalUrl}
+Your Login ID:        ${loginId}
+Temporary Password:   ${tempPass}
 
-To: ${emp.name}
-Position / Role: ${emp.role || 'Team Member'}
+Login URL: ${portalUrl}
+(Please sign in using your Login ID & Temporary Password to mark attendance, submit daily work updates "Kal kya kiya, aaj kya karenge", view salary slips, and access your profile).
+
+============================================================
+1. OFFICIAL OFFER LETTER SUMMARY
+============================================================
+Reference No: RAT/HR/OFFER/${year}/${emp.code || 'EMP'}
+Employee Code: ${emp.code || 'EMP-001'}
+Designation / Role: ${emp.role || 'Staff'}
 Department: ${emp.dept || 'Operations'}
-Gross Monthly Salary: Rs. ${Number(emp.salary || 0).toLocaleString('en-IN')}
-Annual CTC: Rs. ${annualCtc.toLocaleString('en-IN')}
+Gross Monthly Salary: Rs. ${Number(emp.salary || 0).toLocaleString('en-IN')} / month
+Annual CTC: Rs. ${annualCtc.toLocaleString('en-IN')} per annum
 Standard Shift: 8 Hours / Day (09:00 AM - 05:00 PM)
 Date of Joining: ${emp.joined || today()}
 
 Salary Structure:
   - Basic Salary (50%): Rs. ${basic.toLocaleString('en-IN')} / month
   - House Rent Allowance (HRA 30%): Rs. ${hra.toLocaleString('en-IN')} / month
-  - Special / Conveyance Allowance: Rs. ${allowance.toLocaleString('en-IN')} / month
-
-Terms of Employment:
-  - 8-Hour shift standard with hourly attendance and performance tracking.
-  - Initial 3 months probation period.
-  - Subject to verification of Aadhaar, PAN, educational records, and original document submission.
+  - Special / Shift Allowance (20%): Rs. ${allowance.toLocaleString('en-IN')} / month
 
 ============================================================
 2. JOINING CONFIRMATION & APPOINTMENT
 ============================================================
-Reference No: RAT/JOIN/${year}/${emp.code || 'EMP'}
-Employee Code: ${emp.code || '—'}
-Reporting Date: ${emp.joined || today()}
-
-We are pleased to confirm your appointment as ${emp.role || 'Staff'} at ${companyName}.
-Your personnel file has been opened, and your employee identity card has been generated.
+Reference No: RAT/HR/JOIN/${year}/${emp.code || 'EMP'}
+Confirmed Joining: ${emp.joined || today()}
+Designation: ${emp.role || 'Staff'}
 
 ============================================================
-3. YOUR EMPLOYEE PORTAL & HRMS LOGIN
+3. ATTACHED OFFICIAL PDF DOCUMENTS
 ============================================================
-You can access your Employee Self-Service (ESS) portal anytime to mark attendance, apply for leave, view salary slips, download your ID card, and submit daily work reports:
+1. ${offerFileName} — Direct Download: ${offerUrl}
+2. ${joinFileName} — Direct Download: ${joinUrl}
+3. ${idCardFileName} — Direct Download: ${idCardUrl}
 
-Portal Website:       ${portalUrl}
-Your Login ID:        ${loginId}
-Temporary Password:   ${tempPass}
-
-Please sign in and set your new password under Settings.
-
-For any queries, please reply to this email or contact the HR Department.
+For any queries, please reply to this email (${SENDER_EMAIL}).
 
 Warm regards,
-Human Resources Team
-${companyName}
-Official Sender Email: ${SENDER_EMAIL}
+HR Operations Team
+RvmAiTech Solutions Private Limited
+Cyber City, Mansarovar, Jaipur, Rajasthan - 302020
 `;
+
+  const bodyHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${subject}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; color: #0f172a; line-height: 1.5; }
+  .email-wrap { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #cbd5e1; }
+  .email-header { background: #0d2649; padding: 28px 24px 22px; text-align: center; border-bottom: 4px solid #f47b20; }
+  .email-header h1 { color: #ffffff; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .email-header p { color: #38bdf8; margin: 6px 0 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+  .email-body { padding: 28px 24px; }
+  .greeting { font-size: 16px; font-weight: 700; color: #0d2649; margin-bottom: 12px; }
+  .lead-text { font-size: 14px; color: #334155; margin-bottom: 22px; line-height: 1.6; }
+  .creds-card { background: linear-gradient(135deg, #0d2649 0%, #123a72 100%); border-radius: 10px; padding: 22px; margin: 24px 0; color: #ffffff; box-shadow: 0 4px 16px rgba(13,38,73,0.3); border-left: 6px solid #f47b20; }
+  .creds-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: #38bdf8; margin: 0 0 14px; }
+  .creds-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  .creds-table td { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 13.5px; }
+  .creds-table td:first-child { color: #cbd5e1; font-weight: 600; width: 38%; }
+  .creds-table td:last-child { color: #ffffff; font-weight: 700; font-family: monospace; font-size: 14.5px; }
+  .creds-badge { background: rgba(56,189,248,0.2); color: #38bdf8; padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.35); }
+  .btn-login { display: block; text-align: center; background: #f47b20; color: #ffffff !important; font-size: 15px; font-weight: 800; text-decoration: none; padding: 14px 20px; border-radius: 8px; box-shadow: 0 4px 14px rgba(244,123,32,0.4); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 10px; }
+  .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #0d2649; margin: 24px 0 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; }
+  .info-grid { width: 100%; border-collapse: collapse; margin-bottom: 16px; background: #f8fafc; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+  .info-grid td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+  .info-grid td:first-child { font-weight: 600; color: #64748b; width: 40%; }
+  .info-grid td:last-child { font-weight: 700; color: #0f172a; }
+  .docs-box { background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 20px 0; }
+  .doc-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e0f2fe; font-size: 13px; }
+  .doc-row:last-child { border-bottom: 0; }
+  .doc-name { font-weight: 700; color: #0369a1; }
+  .doc-link { color: #0284c7; text-decoration: underline; font-weight: 700; font-size: 12px; }
+  .footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 11.5px; color: #64748b; border-top: 1px solid #e2e8f0; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="email-wrap">
+    <div class="email-header">
+      <h1>RvmAiTech Solutions</h1>
+      <p>Intelligent Automation & Enterprise Systems</p>
+    </div>
+    
+    <div class="email-body">
+      <div class="greeting">Namaste ${emp.name},</div>
+      <div class="lead-text">
+        Congratulations and welcome to <b>RvmAiTech Solutions Private Limited</b>! Your employee onboarding has been confirmed. Below are your official <b>HRMS Employee Portal Login credentials</b> and attached onboarding documents.
+      </div>
+
+      <!-- PORTAL LOGIN CREDENTIALS BOX -->
+      <div class="creds-card">
+        <div class="creds-title">🔑 YOUR EMPLOYEE PORTAL LOGIN DETAILS</div>
+        <table class="creds-table">
+          <tr>
+            <td>Portal Website:</td>
+            <td><a href="${portalUrl}" style="color:#38bdf8;text-decoration:underline;">${portalUrl}</a></td>
+          </tr>
+          <tr>
+            <td>Your Login ID:</td>
+            <td><span class="creds-badge">${loginId}</span></td>
+          </tr>
+          <tr>
+            <td>Temporary Password:</td>
+            <td><span class="creds-badge">${tempPass}</span></td>
+          </tr>
+        </table>
+        
+        <a href="${portalUrl}" class="btn-login" target="_blank" rel="noopener">
+          👉 Click Here to Open Portal & Login
+        </a>
+      </div>
+
+      <p style="font-size:12.5px;color:#475569;margin:-8px 0 20px;">
+        💡 <b>What you can do after logging in:</b> Mark daily attendance, submit daily work updates ("Kal kya kiya, aaj kya karenge"), view your monthly salary payslips, and access your project tasks.
+      </p>
+
+      <!-- APPOINTMENT SUMMARY -->
+      <div class="section-title">📋 Employment Appointment Summary</div>
+      <table class="info-grid">
+        <tr>
+          <td>Employee Code:</td>
+          <td>${emp.code || 'EMP-001'}</td>
+        </tr>
+        <tr>
+          <td>Designation / Role:</td>
+          <td>${emp.role || 'Staff'}</td>
+        </tr>
+        <tr>
+          <td>Department:</td>
+          <td>${emp.dept || 'Operations'}</td>
+        </tr>
+        <tr>
+          <td>Gross Monthly Salary:</td>
+          <td>₹${Number(emp.salary || 0).toLocaleString('en-IN')} / month</td>
+        </tr>
+        <tr>
+          <td>Annual CTC:</td>
+          <td>₹${annualCtc.toLocaleString('en-IN')} per annum</td>
+        </tr>
+        <tr>
+          <td>Operational Shift:</td>
+          <td>8 Hours / Day (09:00 AM – 05:00 PM)</td>
+        </tr>
+        <tr>
+          <td>Reporting Date:</td>
+          <td>${fmtDate(emp.joined)}</td>
+        </tr>
+      </table>
+
+      <!-- ATTACHED DOCUMENTS -->
+      <div class="docs-box">
+        <div style="font-size:12.5px;font-weight:800;color:#0369a1;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">
+          📎 3 Official PDF Documents Attached to this Email:
+        </div>
+        <div class="doc-row">
+          <span class="doc-name">📄 1. Employment Offer Letter (${cleanCode})</span>
+          <a href="${offerUrl}" class="doc-link" target="_blank">Download PDF</a>
+        </div>
+        <div class="doc-row">
+          <span class="doc-name">📜 2. Appointment & Joining Order (${cleanCode})</span>
+          <a href="${joinUrl}" class="doc-link" target="_blank">Download PDF</a>
+        </div>
+        <div class="doc-row">
+          <span class="doc-name">🪪 3. Official Employee ID Card (${cleanCode})</span>
+          <a href="${idCardUrl}" class="doc-link" target="_blank">Download PDF</a>
+        </div>
+      </div>
+
+      <p style="font-size:12.5px;color:#64748b;margin-top:20px;">
+        For any onboarding queries or documentation assistance, please contact HR Operations at <a href="mailto:${SENDER_EMAIL}" style="color:#0284c7;">${SENDER_EMAIL}</a>.
+      </p>
+    </div>
+
+    <div class="footer">
+      <b>RvmAiTech Solutions Private Limited</b><br>
+      CIN: U72900RJ2026PTC089123 · GSTIN: 08AABCR1234F1Z0 · PAN: AAACE0836F<br>
+      Registered Office: Cyber City, Mansarovar, Jaipur, Rajasthan - 302020<br>
+      Official Support: ${SENDER_EMAIL} · +91 7052050656
+    </div>
+  </div>
+</body>
+</html>`;
 
   let offerPdf = null, joinPdf = null, idCardPdf = null;
   try {
@@ -673,26 +914,13 @@ Official Sender Email: ${SENDER_EMAIL}
     console.warn('ID Card PDF generation error:', err);
   }
 
-  const cleanCode = (emp.code || 'EMP').replace(/[^a-zA-Z0-9_-]/g, '');
-  const offerFileName = `Offer_Letter_${cleanCode}.pdf`;
-  const joinFileName = `Joining_Letter_${cleanCode}.pdf`;
-  const idCardFileName = `Employee_ID_Card_${cleanCode}.pdf`;
-
-  const offerUrl = `${portalUrl}/api/pdf/offer-letter/${emp.id}`;
-  const joinUrl = `${portalUrl}/api/pdf/joining-letter/${emp.id}`;
-  const idCardUrl = `${portalUrl}/api/pdf/id-card/${emp.id}`;
-
-  const fullEmailText = bodyText + `\n\n📄 [Official PDF Documents Attached (${cleanCode})]:\n` +
-    `1. ${offerFileName} — Direct Download: ${offerUrl}\n` +
-    `2. ${joinFileName} — Direct Download: ${joinUrl}\n` +
-    `3. ${idCardFileName} — Direct Download: ${idCardUrl}\n`;
-
   const attachments = [];
   if (offerPdf) attachments.push({ filename: offerFileName, content: offerPdf, contentType: 'application/pdf' });
   if (joinPdf) attachments.push({ filename: joinFileName, content: joinPdf, contentType: 'application/pdf' });
   if (idCardPdf) attachments.push({ filename: idCardFileName, content: idCardPdf, contentType: 'application/pdf' });
 
-  const smtpRes = await sendGmailSmtp({ to: emp.email, subject, text: fullEmailText, from: SENDER_EMAIL, attachments });
+  const fullEmailText = bodyText;
+  const smtpRes = await sendGmailSmtp({ to: emp.email, subject, text: fullEmailText, html: bodyHtml, from: SENDER_EMAIL, attachments });
 
   db().emailOutbox = db().emailOutbox || [];
   const logEntry = {
