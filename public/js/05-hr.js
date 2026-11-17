@@ -540,11 +540,17 @@ Official Email: rvmaitech2026@gmail.com`;
   if ($('#btnManualSendEmail', dlg)) {
     $('#btnManualSendEmail', dlg).onclick = async () => {
       const btn = $('#btnManualSendEmail', dlg);
-      btn.disabled = true; btn.textContent = 'Sending...';
+      btn.disabled = true; btn.textContent = 'Sending via SMTP...';
       try {
         const res = await api('POST', `/api/employees/${encodeURIComponent(e.id)}/send-email`);
-        toast(res.sentLive ? `Email delivered to ${e.email} via Gmail SMTP!` : `Email logged to Outbox for ${e.email}!`, 'good');
-        btn.textContent = res.sentLive ? 'Delivered ✓' : 'Sent / Logged ✓';
+        if (res.sentLive) {
+          toast(`Email with PDF delivered directly to ${e.email} via Gmail SMTP!`, 'good');
+          btn.textContent = 'Delivered ✓';
+        } else {
+          toast(res.error ? `SMTP Error: ${res.error}` : `Email logged to Outbox. Click 🚀 Open in Gmail button to dispatch.`, 'warn');
+          btn.textContent = 'Sent via Web Gmail';
+          btn.disabled = false;
+        }
       } catch (err) {
         toast(err.message || 'Could not send email.', 'bad');
         btn.disabled = false; btn.textContent = '✉️ Retry Send via SMTP';

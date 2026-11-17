@@ -36,7 +36,8 @@ const { seed } = require('./lib/seed');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const SENDER_EMAIL = 'rvmaitech2026@gmail.com';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'rvmaitech2026@gmail.com';
+const DEFAULT_GMAIL_PASS = 'mqfhtctvjokndqjp';
 const pdfGen = require('./lib/pdfGenerator');
 
 function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
@@ -91,9 +92,9 @@ function buildMimeMessage({ from, to, subject, text, attachments = [] }) {
 }
 
 function sendGmailSmtp({ to, subject, text, body, from = SENDER_EMAIL, attachments = [] }) {
-  const pass = process.env.GMAIL_PASS || process.env.SMTP_PASS || (db().company && db().company.emailPass) || (db().company && db().company.smtpPass) || '';
+  const pass = (process.env.GMAIL_PASS || process.env.SMTP_PASS || (db().company && db().company.emailPass) || (db().company && db().company.smtpPass) || DEFAULT_GMAIL_PASS || '').replace(/\s+/g, '');
   const msgText = text || body || '';
-  if (!pass) return Promise.resolve({ ok: true, sentLive: false, mode: 'logged' });
+  if (!pass) return Promise.resolve({ ok: false, sentLive: false, error: 'No Gmail App Password configured', mode: 'logged' });
 
   return new Promise(resolve => {
     let finished = false;
@@ -160,13 +161,19 @@ const MAX_UPLOAD = 8 * 1024 * 1024;    // 8 MB per photo or document
 
 /* ---------------- data ---------------- */
 function freshDb() {
-  const db = { meta: { version: 1, createdAt: new Date().toISOString() }, company: { name: '' }, users: [], files: [], attendance: {}, sampleAttendance: [] };
+  const db = { meta: { version: 1, createdAt: new Date().toISOString() }, company: { name: 'RvmAiTech', senderEmail: SENDER_EMAIL, emailPass: DEFAULT_GMAIL_PASS }, users: [], files: [], attendance: {}, sampleAttendance: [] };
   for (const c of DATA_COLS) db[c] = [];
   return db;
 }
 fs.mkdirSync(UPLOADS, { recursive: true });
 const store = new JsonFile(path.join(DATA, 'db.json'), freshDb, { backupDir: path.join(DATA, 'backups') });
-{ const blank = freshDb(); for (const k of Object.keys(blank)) if (store.data[k] === undefined) store.data[k] = blank[k]; }
+{
+  const blank = freshDb();
+  for (const k of Object.keys(blank)) if (store.data[k] === undefined) store.data[k] = blank[k];
+  if (!store.data.company.emailPass) store.data.company.emailPass = DEFAULT_GMAIL_PASS;
+  if (!store.data.company.senderEmail) store.data.company.senderEmail = SENDER_EMAIL;
+  if (!store.data.company.name) store.data.company.name = 'RvmAiTech';
+}
 
 // Dual Storage: Real-time background sync with MongoDB Atlas
 const origStoreSave = store.save.bind(store);
@@ -562,6 +569,7 @@ route('POST', '/api/employees/:id/credentials', { mod: ['hrms'] }, async ({ req,
   emp.status = 'Registered';
   await store.save();
   const host = req.headers.host || `localhost:${PORT}`;
+  const proto = isHttps(req) || host.includes('render.com') ? 'https' : 'http';
   send(res, 200, {
     ok: true,
     empId: emp.id,
@@ -569,7 +577,7 @@ route('POST', '/api/employees/:id/credentials', { mod: ['hrms'] }, async ({ req,
     email: emp.email || '',
     loginId,
     tempPassword: tempPass,
-    portalUrl: `http://${host}`
+    portalUrl: `${proto}://${host}`
   });
 });
 
@@ -577,7 +585,8 @@ route('POST', '/api/employees/:id/send-email', { mod: ['hrms'] }, async ({ req, 
   const emp = findDoc('employees', params.id);
   if (!emp.email) throw new HttpError(400, 'Employee does not have an email address recorded. Please add an email in employee details first.');
   const host = req.headers.host || `localhost:${PORT}`;
-  const portalUrl = `http://${host}`;
+  const proto = isHttps(req) || host.includes('render.com') ? 'https' : 'http';
+  const portalUrl = `${proto}://${host}`;
   const loginId = emp.userLoginId || (emp.code ? emp.code.toLowerCase().replace(/[^a-z0-9]/g, '') : 'emp');
   const tempPass = emp.tempPassword || 'Check with HR';
   const companyName = db().company.name || 'RvmAiTech';

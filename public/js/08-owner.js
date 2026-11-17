@@ -134,9 +134,9 @@ V.overview = D => {
           </div>
 
           <!-- Current Project Badge -->
-          <div style="margin-bottom:6px">
-            ${taskProj ? `<span class="stamp stamp-info" style="font-size:11px">📁 Project: <b>${esc(taskProj.name)}</b></span>`
-              : `<span class="stamp stamp-mute" style="font-size:11px">General Department Operations</span>`}
+          <div style="margin-bottom:6px;min-width:0">
+            ${taskProj ? `<span class="stamp stamp-info" style="font-size:11px;max-width:100%;white-space:normal;display:inline-block;line-height:1.35;padding:4px 10px;border-radius:8px" title="Project: ${esc(taskProj.name)}">📁 Project: <b>${esc(taskProj.name)}</b></span>`
+              : `<span class="stamp stamp-mute" style="font-size:11px;max-width:100%;display:inline-block;padding:3px 8px;border-radius:6px">General Department Operations</span>`}
           </div>
 
           <!-- Today's Active Task ("Kya Kar Raha Hai") -->

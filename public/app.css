@@ -233,12 +233,23 @@ input:focus,select:focus,textarea:focus{border-color:#EA580C;outline:3px solid r
 select.inline{padding:4px 8px;font-size:12.5px;font-weight:600;border-radius:6px}
 
 /* ---------- stamps ---------- */
-.stamp{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border:1px solid transparent;border-radius:20px;white-space:nowrap;line-height:1.3}
+.stamp{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border:1px solid transparent;border-radius:20px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;line-height:1.3}
+.stamp b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .stamp-good{color:#047857;background:#ECFDF5;border-color:#A7F3D0}
 .stamp-warn{color:#B45309;background:#FFFBEB;border-color:#FDE68A}
 .stamp-bad{color:#B91C1C;background:#FEF2F2;border-color:#FECACA}
-.stamp-info{color:#1D4ED8;background:#E0EDFF;border-color:#BFDBFE;font-weight:800}
+.stamp-info{color:#0284C7;background:#E0F2FE;border-color:#BAE6FD;font-weight:800}
 .stamp-mute{color:var(--ink-2);background:var(--rule-2);border-color:var(--rule)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .stamp-info{color:#38BDF8;background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.35)}
+  :root:not([data-theme="light"]) .stamp-good{color:#34D399;background:rgba(16,185,129,0.14);border-color:rgba(16,185,129,0.35)}
+  :root:not([data-theme="light"]) .stamp-warn{color:#FBBF24;background:rgba(245,158,11,0.14);border-color:rgba(245,158,11,0.35)}
+  :root:not([data-theme="light"]) .stamp-bad{color:#F87171;background:rgba(239,68,68,0.14);border-color:rgba(239,68,68,0.35)}
+}
+:root[data-theme="dark"] .stamp-info{color:#38BDF8;background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.35)}
+:root[data-theme="dark"] .stamp-good{color:#34D399;background:rgba(16,185,129,0.14);border-color:rgba(16,185,129,0.35)}
+:root[data-theme="dark"] .stamp-warn{color:#FBBF24;background:rgba(245,158,11,0.14);border-color:rgba(245,158,11,0.35)}
+:root[data-theme="dark"] .stamp-bad{color:#F87171;background:rgba(239,68,68,0.14);border-color:rgba(239,68,68,0.35)}
 
 /* ---------- tables ---------- */
 .tbl-wrap{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--radius-card);overflow-x:auto;box-shadow:var(--shadow-sm)}
@@ -668,10 +679,18 @@ dl.doc-meta{margin:0}
 .pm-team-emp-card{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 
 /* Task Table & Pills */
-.task-badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase}
+.task-badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;flex-shrink:0}
 .task-prio-High{background:#fee2e2;color:#991b1b}
 .task-prio-Medium{background:#fef3c7;color:#92400e}
 .task-prio-Low{background:#e0f2fe;color:#075985}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .task-prio-High{background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)}
+  :root:not([data-theme="light"]) .task-prio-Medium{background:rgba(245,158,11,0.18);color:#fcd34d;border:1px solid rgba(245,158,11,0.35)}
+  :root:not([data-theme="light"]) .task-prio-Low{background:rgba(56,189,248,0.18);color:#7dd3fc;border:1px solid rgba(56,189,248,0.35)}
+}
+:root[data-theme="dark"] .task-prio-High{background:rgba(239,68,68,0.18);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)}
+:root[data-theme="dark"] .task-prio-Medium{background:rgba(245,158,11,0.18);color:#fcd34d;border:1px solid rgba(245,158,11,0.35)}
+:root[data-theme="dark"] .task-prio-Low{background:rgba(56,189,248,0.18);color:#7dd3fc;border:1px solid rgba(56,189,248,0.35)}
 .task-status-sel{padding:4px 8px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid var(--rule)}
 
 /* Department Planner Board */
@@ -679,16 +698,19 @@ dl.doc-meta{margin:0}
 .dept-col{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);min-width:0;box-sizing:border-box;overflow:hidden}
 .dept-col-hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--rule-2);padding-bottom:10px;flex-wrap:wrap;gap:8px}
 .dept-col-title{font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px;min-width:0}
-.dept-emp-card{background:var(--sheet);border:1px solid var(--rule);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:border-color .15s ease}
+.dept-emp-card{background:var(--sheet);border:1px solid var(--rule);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:border-color .15s ease;min-width:0;overflow:hidden;box-sizing:border-box}
+.dept-emp-card > div{min-width:0;max-width:100%}
 .dept-emp-card:hover{border-color:var(--accent)}
-.dept-emp-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.dept-emp-card .person b{color:var(--ink) !important;font-size:13.5px;font-weight:700;display:block;line-height:1.25}
+.dept-emp-top{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+.dept-emp-card .person{min-width:0;flex:1}
+.dept-emp-card .person > div{min-width:0}
+.dept-emp-card .person b{color:var(--ink) !important;font-size:13.5px;font-weight:700;display:block;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dept-emp-card .person .sub{display:block;color:var(--ink-2) !important;font-size:11.5px;font-weight:600;margin-top:2px;line-height:1.2}
 .dept-emp-card .muted{color:var(--ink-2) !important;font-size:12px}
-.dept-emp-card .link-btn{color:var(--accent);font-weight:700;font-size:12px;padding:4px 9px;border-radius:5px;background:var(--accent-soft);text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center}
+.dept-emp-card .link-btn{color:var(--accent);font-weight:700;font-size:12px;padding:4px 9px;border-radius:5px;background:var(--accent-soft);text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;flex-shrink:0}
 .dept-emp-card .link-btn:hover{filter:brightness(1.1);text-decoration:none}
-.dept-task-mini{background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--ink);display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.dept-task-mini b{color:var(--ink) !important;display:block;font-size:12.5px}
+.dept-task-mini{background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--ink);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0;overflow:hidden}
+.dept-task-mini b{color:var(--ink) !important;display:block;font-size:12.5px;word-break:break-word}
 
 /* Department Overview Cards & Grid */
 .dept-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;margin:16px 0;width:100%;box-sizing:border-box}

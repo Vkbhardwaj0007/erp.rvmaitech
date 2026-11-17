@@ -273,7 +273,7 @@ V['task-allocation'] = D => {
             <div style="flex:1">
               <b>${esc(k.title)}</b>
               <div style="font-size:11px;color:var(--ink-2);margin-top:3px">
-                ${k.projectId ? `<span class="stamp stamp-info" style="font-size:10px">${esc((D.proj.get(k.projectId) || {}).name || 'Project')}</span> · ` : ''}
+                ${k.projectId ? `<span class="stamp stamp-info" style="font-size:10px;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${esc((D.proj.get(k.projectId) || {}).name || 'Project')}">${esc((D.proj.get(k.projectId) || {}).name || 'Project')}</span> · ` : ''}
                 <span class="task-badge task-prio-${esc(k.priority || 'Medium')}" style="font-size:10px">${esc(k.priority || 'Medium')}</span>
                 ${k.dueDate < t ? `<span class="stamp stamp-bad" style="font-size:10px">Overdue</span>` : ''}
               </div>
