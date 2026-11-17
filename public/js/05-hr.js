@@ -582,6 +582,7 @@ function showIdCardModal(e) {
           <p class="dlg-sub" style="margin:2px 0 0">${esc(e.name)} · ${esc(e.code)}</p>
         </div>
         <div class="vactions">
+          <a href="/api/pdf/id-card/${esc(e.id)}" target="_blank" download="ID_Card_${esc(e.code || 'EMP')}.pdf" class="btn" style="background:#0284c7;color:#fff;border-color:#0284c7;font-weight:700">📥 Download PDF</a>
           <button type="button" class="btn btn-primary" onclick="printDoc('printableArea')">Print / Save PDF</button>
           <button type="button" class="btn" data-x="cancel">Close</button>
         </div>

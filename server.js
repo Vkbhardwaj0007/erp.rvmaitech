@@ -656,18 +656,42 @@ ${companyName}
 Official Sender Email: ${SENDER_EMAIL}
 `;
 
-  let pdfBuf = null;
+  let offerPdf = null, joinPdf = null, idCardPdf = null;
   try {
-    pdfBuf = await pdfGen.generateOfferLetterPdf(emp, db().company);
+    offerPdf = await pdfGen.generateOfferLetterPdf(emp, db().company);
   } catch (err) {
     console.warn('Offer letter PDF generation error:', err);
   }
+  try {
+    joinPdf = await pdfGen.generateJoiningLetterPdf(emp, db().company);
+  } catch (err) {
+    console.warn('Joining letter PDF generation error:', err);
+  }
+  try {
+    idCardPdf = await pdfGen.generateIdCardPdf(emp, db().company);
+  } catch (err) {
+    console.warn('ID Card PDF generation error:', err);
+  }
 
-  const pdfFileName = `Offer_Letter_${(emp.code || 'EMP').replace(/[^a-zA-Z0-9_-]/g, '')}.pdf`;
-  const pdfDownloadUrl = `${portalUrl}/api/pdf/offer-letter/${emp.id}`;
-  const fullEmailText = bodyText + `\n\n📄 [Official PDF Attached: ${pdfFileName}]\nDirect PDF Download Link: ${pdfDownloadUrl}\n`;
+  const cleanCode = (emp.code || 'EMP').replace(/[^a-zA-Z0-9_-]/g, '');
+  const offerFileName = `Offer_Letter_${cleanCode}.pdf`;
+  const joinFileName = `Joining_Letter_${cleanCode}.pdf`;
+  const idCardFileName = `Employee_ID_Card_${cleanCode}.pdf`;
 
-  const attachments = pdfBuf ? [{ filename: pdfFileName, content: pdfBuf, contentType: 'application/pdf' }] : [];
+  const offerUrl = `${portalUrl}/api/pdf/offer-letter/${emp.id}`;
+  const joinUrl = `${portalUrl}/api/pdf/joining-letter/${emp.id}`;
+  const idCardUrl = `${portalUrl}/api/pdf/id-card/${emp.id}`;
+
+  const fullEmailText = bodyText + `\n\n📄 [Official PDF Documents Attached (${cleanCode})]:\n` +
+    `1. ${offerFileName} — Direct Download: ${offerUrl}\n` +
+    `2. ${joinFileName} — Direct Download: ${joinUrl}\n` +
+    `3. ${idCardFileName} — Direct Download: ${idCardUrl}\n`;
+
+  const attachments = [];
+  if (offerPdf) attachments.push({ filename: offerFileName, content: offerPdf, contentType: 'application/pdf' });
+  if (joinPdf) attachments.push({ filename: joinFileName, content: joinPdf, contentType: 'application/pdf' });
+  if (idCardPdf) attachments.push({ filename: idCardFileName, content: idCardPdf, contentType: 'application/pdf' });
+
   const smtpRes = await sendGmailSmtp({ to: emp.email, subject, text: fullEmailText, from: SENDER_EMAIL, attachments });
 
   db().emailOutbox = db().emailOutbox || [];
@@ -680,10 +704,10 @@ Official Sender Email: ${SENDER_EMAIL}
     body: fullEmailText,
     sentAt: Date.now(),
     sentBy: user.name,
-    hasAttachment: !!pdfBuf,
-    attachmentName: pdfFileName,
-    pdfDownloadUrl,
-    status: smtpRes.sentLive ? 'Delivered (Gmail SMTP with PDF)' : 'Logged (Sent with PDF Attachment)'
+    hasAttachment: attachments.length > 0,
+    attachmentName: `${offerFileName}, ${joinFileName}, ${idCardFileName}`,
+    pdfDownloadUrl: offerUrl,
+    status: smtpRes.sentLive ? 'Delivered (Gmail SMTP with 3 PDFs)' : 'Logged (Sent with 3 PDF Attachments)'
   };
   db().emailOutbox.push(logEntry);
   await store.save();
@@ -698,14 +722,14 @@ Official Sender Email: ${SENDER_EMAIL}
     to: emp.email,
     subject,
     body: fullEmailText,
-    hasAttachment: !!pdfBuf,
-    pdfUrl: pdfDownloadUrl,
+    hasAttachment: attachments.length > 0,
+    pdfUrl: offerUrl,
     sentLive: smtpRes.sentLive,
     gmailWebUrl,
     mailtoUrl,
     message: smtpRes.sentLive 
-      ? `Email with PDF Offer Letter delivered to ${emp.email} via Gmail SMTP!` 
-      : `Email with PDF Offer Letter logged to outbox from ${SENDER_EMAIL}. Click 'Open in Gmail' for 1-click dispatch.`
+      ? `Offer Letter, Joining Confirmation & ID Card delivered to ${emp.email} via Gmail SMTP!` 
+      : `Email with 3 PDF documents logged to outbox from ${SENDER_EMAIL}. Click 'Open in Gmail' for 1-click dispatch.`
   });
 });
 
@@ -856,6 +880,17 @@ route('GET', '/api/pdf/joining-letter/:id', { open: true }, async ({ req, res, p
   res.writeHead(200, {
     'Content-Type': 'application/pdf',
     'Content-Disposition': `attachment; filename="Joining_Letter_${(emp.code || emp.id).replace(/[^a-zA-Z0-9_-]/g, '')}.pdf"`,
+    'Content-Length': pdf.length
+  });
+  res.end(pdf);
+});
+
+route('GET', '/api/pdf/id-card/:id', { open: true }, async ({ req, res, params }) => {
+  const emp = findDoc('employees', params.id);
+  const pdf = await pdfGen.generateIdCardPdf(emp, db().company);
+  res.writeHead(200, {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="ID_Card_${(emp.code || emp.id).replace(/[^a-zA-Z0-9_-]/g, '')}.pdf"`,
     'Content-Length': pdf.length
   });
   res.end(pdf);
