@@ -584,6 +584,40 @@ function renderCandidatesTabHtml() {
   const offerSent = cands.filter(c => c.status === 'Offer Sent');
   const joined = cands.filter(c => c.status === 'Joined / Converted');
 
+  const rows = cands.map(c => `
+    <tr>
+      <td>
+        <b style="font-size:13.5px;color:var(--ink)">${esc(c.name)}</b>
+        <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.email)} · ${esc(c.phone)}</div>
+        ${c.address ? `<div style="font-size:11px;color:var(--ink-2);margin-top:1px">📍 ${esc(c.address)}</div>` : ''}
+      </td>
+      <td>
+        <b style="font-size:13px;color:var(--ink)">${esc(c.role || 'Staff')}</b>
+        <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.dept || 'Engineering')}</div>
+      </td>
+      <td>
+        <div><b>${esc(c.experience || 'Fresher')}</b></div>
+        <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${esc(c.source || 'Website')}</div>
+      </td>
+      <td class="num"><b style="color:var(--ink)">${inr(c.expectedSalary || 0)}</b></td>
+      <td class="num"><b style="color:#0284c7">${inr(c.offeredSalary || c.expectedSalary || 0)}</b></td>
+      <td>${c.interviewDate ? `<span style="font-weight:700">${fmtDate(c.interviewDate)}</span>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
+      <td>${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</td>
+      <td class="acts">
+        <div class="vactions" style="justify-content:flex-end">
+          ${(c.status === 'Selected' || c.status === 'Offer Sent')
+            ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
+               <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${esc(c.id)}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
+            : c.status === 'Joined / Converted'
+            ? `<span style="font-size:12px;font-weight:800;color:#16a34a;padding:4px 8px">✓ Onboarded</span>`
+            : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 Interview</button>
+               <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select</button>`}
+          <button class="btn btn-sm btn-outline" data-action="cand-edit" data-id="${esc(c.id)}">Edit</button>
+        </div>
+      </td>
+    </tr>
+  `);
+
   const cardsHtml = cands.length === 0 ? empty('No candidates recorded yet', 'Applicants who apply from the company website or walk in for interviews will appear here.', W('hrms', '<button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>')) :
     table([
       'Candidate Name & Contact',
@@ -594,63 +628,20 @@ function renderCandidatesTabHtml() {
       'Interview Date',
       'Hiring Status',
       ''
-    ], cands.map(c => [
-      `<div><b>${esc(c.name)}</b><div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.email)} · ${esc(c.phone)}</div></div>`,
-      `<div><b>${esc(c.role || 'Staff')}</b><div style="font-size:11.5px;color:var(--ink-2)">${esc(c.dept || 'Engineering')}</div></div>`,
-      `<div>${esc(c.experience || 'Fresher')}<div style="font-size:11px;color:var(--ink-2)">${esc(c.source || 'Website')}</div></div>`,
-      inr(c.expectedSalary || 0),
-      inr(c.offeredSalary || c.expectedSalary || 0),
-      c.interviewDate ? fmtDate(c.interviewDate) : '<span style="color:var(--ink-2)">Not set</span>',
-      stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn'),
-      `<div class="vactions" style="justify-content:flex-end">
-        ${(c.status === 'Selected' || c.status === 'Offer Sent')
-          ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${c.id}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
-             <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${c.id}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
-          : c.status === 'Joined / Converted'
-          ? `<span style="font-size:11.5px;font-weight:700;color:#16a34a">✓ Onboarded</span>`
-          : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${c.id}">📅 Interview</button>
-             <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${c.id}">✓ Select</button>`}
-        <button class="btn btn-sm btn-outline" data-action="cand-edit" data-id="${c.id}">Edit</button>
-      </div>`
-    ]));
+    ], rows);
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0 16px">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div class="tile" style="padding:10px 16px"><span class="sub">Total Applicants</span><b>${cands.length}</b></div>
-        <div class="tile" style="padding:10px 16px"><span class="sub">Applied</span><b style="color:#f59e0b">${applied.length}</b></div>
-        <div class="tile" style="padding:10px 16px"><span class="sub">Interviewing</span><b style="color:#0284c7">${interview.length}</b></div>
-        <div class="tile" style="padding:10px 16px"><span class="sub">Selected / Offer</span><b style="color:#10b981">${selected.length + offerSent.length}</b></div>
-        <div class="tile" style="padding:10px 16px"><span class="sub">Joined (Employees)</span><b style="color:#059669">${joined.length}</b></div>
+        <div class="dept-card-stat-pill"><span class="sub">Total Applicants</span><b>${cands.length}</b></div>
+        <div class="dept-card-stat-pill"><span class="sub">Applied</span><b style="color:#f59e0b">${applied.length}</b></div>
+        <div class="dept-card-stat-pill"><span class="sub">Interviewing</span><b style="color:#0284c7">${interview.length}</b></div>
+        <div class="dept-card-stat-pill"><span class="sub">Selected / Offer</span><b style="color:#10b981">${selected.length + offerSent.length}</b></div>
+        <div class="dept-card-stat-pill"><span class="sub">Joined (Employees)</span><b style="color:#059669">${joined.length}</b></div>
       </div>
       <div>
         <button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>
       </div>
-    </div>
-
-    <!-- Career Form Integration Snippet for Website -->
-    <div style="background:linear-gradient(135deg, rgba(13,38,73,0.95), rgba(18,58,114,0.95));border:1px solid #0284c7;border-radius:10px;padding:14px 18px;margin-bottom:18px;color:#fff">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:13px;font-weight:800;color:#38bdf8">🌐 Website Careers Form Integration (Automated Candidates Ingestion)</div>
-        <span class="stamp stamp-good" style="font-size:11px">API Live</span>
-      </div>
-      <p style="font-size:12px;color:#cbd5e1;margin:0 0 8px">
-        Apni website ke Careers / Apply page se candidates ka data direct yahan bhejne ke liye ye code use karein:
-      </p>
-      <pre style="background:#051429;border:1px solid #1e3a5f;padding:10px;border-radius:6px;font-size:11.5px;color:#7dd3fc;overflow-x:auto;margin:0">await fetch('https://erp-rvmaitech.onrender.com/api/careers/apply', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    name: 'Candidate Full Name',
-    email: 'candidate@example.com',
-    phone: '+91 9876543210',
-    role: 'Embedded IoT / Automation Engineer',
-    dept: 'R&D',
-    experience: '2 Years',
-    expectedSalary: 30000,
-    source: 'Website Careers Page'
-  })
-});</pre>
     </div>
 
     ${cardsHtml}
@@ -845,6 +836,12 @@ window.showPayslipModal = showPayslipModal;
 ACT['payslip-open'] = el => {
   const e = S.employees.find(x => x.id === el.dataset.id);
   if (e) showPayslipModal(e);
+};
+
+V['hr-candidates'] = D => {
+  S.ui.tab = 'candidates';
+  S.ui.profile = '';
+  return V['hr-employees'](D);
 };
 
 V['hr-employees'] = D => {

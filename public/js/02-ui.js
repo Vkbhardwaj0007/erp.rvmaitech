@@ -370,7 +370,7 @@ function navGroups() {
   if (can('projects')) g.push({ label: 'PROJECTS', items: [['projects', 'All projects'], ['proj-history', 'Project history (Delivered)']] });
   if (can('erp')) g.push({ label: 'ERP', items: [['erp-home', 'ERP dashboard'], ['erp-inventory', 'Inventory'], ['erp-issues', 'Stock issue register'], ['erp-holdings', 'Who holds what'], ['erp-sales', 'Sales invoices'], ['erp-purchases', 'Purchases']] });
   if (can('crm')) g.push({ label: 'CRM', items: [['crm-home', 'CRM dashboard'], ['crm-leads', 'Leads'], ['crm-pipeline', 'Pipeline'], ['crm-customers', 'Customers']] });
-  if (can('hrms')) g.push({ label: 'HRMS', items: [['hr-home', 'HR dashboard'], ['hr-salary-hub', 'Salary & Hours Dashboard'], ['hr-timesheet', 'Staff Timesheet & Tracking'], ['hr-employees', 'Employees & ID Cards'], ['hr-attendance', 'Attendance'], ['hr-leave', 'Leave'], ['hr-payroll', 'Payroll']] });
+  if (can('hrms')) g.push({ label: 'HRMS', items: [['hr-home', 'HR dashboard'], ['hr-candidates', '🎯 Candidates & Hiring'], ['hr-salary-hub', 'Salary & Hours Dashboard'], ['hr-timesheet', 'Staff Timesheet & Tracking'], ['hr-employees', 'Employees & ID Cards'], ['hr-attendance', 'Attendance'], ['hr-leave', 'Leave'], ['hr-payroll', 'Payroll']] });
   if (can('finance')) g.push({ label: 'FINANCE', items: [['fin-home', 'Finance dashboard'], ['fin-receivables', 'Money to collect'], ['fin-expenses', 'Expenses'], ['fin-staff-costs', 'Staff daily costs']] });
   if (isOwner()) g.push({ label: 'ADMIN', items: [['admin-users', 'Logins and access']] });
   return g;
@@ -386,8 +386,10 @@ function renderNav(D) {
   const overdueTasks = (S.tasks || []).filter(t => t.status !== 'Completed' && t.dueDate && t.dueDate < today());
   const lateProjects = S.projects.filter(p => p.status === 'Running' && p.end && p.end < today());
   const myPendingTasks = isEmployee() ? (S.tasks || []).filter(t => t.empId === (S.user && S.user.empId) && t.status !== 'Completed') : [];
+  const newCandidates = (S.candidates || []).filter(c => c.status === 'Applied');
 
   const badges = {
+    'hr-candidates': [newCandidates.length, false],
     'task-allocation': [overdueTasks.length, true],
     'project-manager': [lateProjects.length, true],
     'emp-tasks': [myPendingTasks.length, false],
