@@ -45,7 +45,9 @@ function empty(title, text, action) {
 const matches = (q, ...parts) => !q || parts.join(' ').toLowerCase().includes(q);
 const query = view => String(S.ui.q[view] || '').trim().toLowerCase();
 function tile(label, value, sub, href) {
-  const inner = `<div class="tile-label">${esc(label)}</div><div class="tile-value">${value}</div><div class="tile-sub">${sub || ''}</div>`;
+  const plainVal = String(value || '').replace(/<[^>]*>/g, '');
+  const sizeCls = plainVal.length > 18 ? ' tile-value-sm' : plainVal.length > 11 ? ' tile-value-md' : '';
+  const inner = `<div class="tile-label">${esc(label)}</div><div class="tile-value${sizeCls}">${value}</div><div class="tile-sub">${sub || ''}</div>`;
   return href ? `<a class="tile" href="${href}">${inner}</a>` : `<div class="tile">${inner}</div>`;
 }
 function stepper(action, label, nextDisabled) {

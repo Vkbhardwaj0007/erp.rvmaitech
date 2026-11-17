@@ -1029,56 +1029,56 @@ function profileView(D, e) {
 
     <div class="stack">
       <!-- Official Documents & Letters Hub (Offer, Joining, ID Card, Salary Slip) -->
-      <section class="card" style="border:1.5px solid #0d2649;background:#f8fafc">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
+      <section class="card" style="border:1.5px solid var(--rule);background:var(--sheet)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid var(--rule);padding-bottom:10px">
           <div>
-            <h2 style="margin:0;font-size:17px;font-weight:900;color:#0d2649">📜 Official Employee Documents & Letters</h2>
+            <h2 style="margin:0;font-size:17px;font-weight:900;color:var(--ink)">📜 Official Employee Documents & Letters</h2>
             <p class="card-sub" style="margin:2px 0 0">Click to view, print in A4, download PDF, or dispatch via official email.</p>
           </div>
           <span class="stamp stamp-good">Official RvmAiTech Records</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:12px">
-          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
             <div>
-              <div style="font-size:11px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">Pre-Joining</div>
-              <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:2px">📄 Employment Offer Letter</div>
-              <p style="font-size:11.5px;color:#64748b;margin-top:4px">10 formal clauses, CTC breakdown & acceptance.</p>
+              <div style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:.05em">Pre-Joining</div>
+              <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">📄 Employment Offer Letter</div>
+              <p style="font-size:11.5px;color:var(--ink-2);margin-top:4px">10 formal clauses, CTC breakdown & acceptance.</p>
             </div>
             <button class="btn btn-primary" data-action="emp-offer" data-id="${esc(e.id)}" style="width:100%">Open Offer Letter</button>
           </div>
 
-          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
             <div>
-              <div style="font-size:11px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:.05em">Onboarding</div>
-              <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:2px">📜 Joining Letter & Form</div>
-              <p style="font-size:11.5px;color:#64748b;margin-top:4px">Parts A–F: Form, assets & IT checklist.</p>
+              <div style="font-size:11px;font-weight:800;color:#10b981;text-transform:uppercase;letter-spacing:.05em">Onboarding</div>
+              <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">📜 Joining Letter & Form</div>
+              <p style="font-size:11.5px;color:var(--ink-2);margin-top:4px">Parts A–F: Form, assets & IT checklist.</p>
             </div>
             <button class="btn btn-primary" data-action="emp-joining" data-id="${esc(e.id)}" style="background:#059669;border-color:#059669;width:100%">Open Joining Form</button>
           </div>
 
-          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
             <div>
               <div style="font-size:11px;font-weight:800;color:#f47b20;text-transform:uppercase;letter-spacing:.05em">Identity Badge</div>
-              <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:2px">🪪 Official ID Card</div>
-              <p style="font-size:11.5px;color:#64748b;margin-top:4px">Standard CR-80 corporate photo ID card.</p>
+              <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">🪪 Official ID Card</div>
+              <p style="font-size:11.5px;color:var(--ink-2);margin-top:4px">Standard CR-80 corporate photo ID card.</p>
             </div>
             <button class="btn" data-action="emp-idcard" data-id="${esc(e.id)}" style="width:100%;font-weight:700">View ID Card</button>
           </div>
 
-          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
             <div>
-              <div style="font-size:11px;font-weight:800;color:#0d2649;text-transform:uppercase;letter-spacing:.05em">Payroll</div>
-              <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:2px">🧾 Salary Statement / Payslip</div>
-              <p style="font-size:11.5px;color:#64748b;margin-top:4px">Monthly earnings, hours & deductions.</p>
+              <div style="font-size:11px;font-weight:800;color:#60a5fa;text-transform:uppercase;letter-spacing:.05em">Payroll</div>
+              <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">🧾 Salary Statement / Payslip</div>
+              <p style="font-size:11.5px;color:var(--ink-2);margin-top:4px">Monthly earnings, hours & deductions.</p>
             </div>
             <button class="btn" data-action="payslip-open" data-id="${esc(e.id)}" style="width:100%;font-weight:700">View Payslip</button>
           </div>
 
-          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
             <div>
-              <div style="font-size:11px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em">ESS Dispatch</div>
-              <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:2px">✉️ Send Credentials & Letters</div>
-              <p style="font-size:11.5px;color:#64748b;margin-top:4px">Send login ID, password & documents to staff.</p>
+              <div style="font-size:11px;font-weight:800;color:#a78bfa;text-transform:uppercase;letter-spacing:.05em">ESS Dispatch</div>
+              <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">✉️ Send Credentials & Letters</div>
+              <p style="font-size:11.5px;color:var(--ink-2);margin-top:4px">Send login ID, password & documents to staff.</p>
             </div>
             <button class="btn" data-action="emp-creds" data-id="${esc(e.id)}" style="width:100%;font-weight:700">Dispatch Email</button>
           </div>
