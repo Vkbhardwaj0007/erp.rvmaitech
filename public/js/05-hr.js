@@ -685,13 +685,16 @@ function showCandidateDossierModal(c) {
           Candidate ID: <code>${esc(c.id)}</code> · Applied: <b>${fmtDate(new Date(c.createdAt || Date.now()).toISOString().slice(0,10))}</b>
         </div>
         <div class="vactions">
+          ${(c.interviewDate || c.status === 'Interview Scheduled')
+            ? `<a href="/api/candidates/${encodeURIComponent(c.id)}/interview-letter" target="_blank" rel="noopener" class="btn" style="background:#0284c7;color:#fff;font-weight:700">📄 Interview Call Letter PDF</a>`
+            : ''}
+          <button class="btn btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 ${c.interviewDate ? 'Reschedule Interview' : 'Schedule Interview'}</button>
           ${(c.status === 'Selected' || c.status === 'Offer Sent')
             ? `<button class="btn" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}">✉️ Send Job Offer (No Password)</button>
                <button class="btn btn-primary" data-action="cand-convert" data-id="${esc(c.id)}">🚀 Register Employee & Issue Credentials</button>`
             : c.status === 'Joined / Converted'
             ? `<span style="font-size:13px;font-weight:800;color:#16a34a">✓ Officially Onboarded as Employee</span>`
-            : `<button class="btn btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 Schedule Interview</button>
-               <button class="btn" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select Candidate</button>`}
+            : `<button class="btn" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select Candidate</button>`}
           <button type="button" class="btn" data-x="cancel">Close</button>
         </div>
       </div>
@@ -763,17 +766,18 @@ function renderCandidatesTabHtml() {
           ? `<a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" title="View Candidate Resume PDF" onclick="event.stopPropagation()">📄 View Resume</a>`
           : `<label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0" title="Upload Resume" onclick="event.stopPropagation()">+ Upload<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>`}
       </td>
-      <td>${c.interviewDate ? `<span style="font-weight:700">${fmtDate(c.interviewDate)}</span>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
+      <td>${c.interviewDate ? `<div style="font-weight:700">${fmtDate(c.interviewDate)}</div><div style="font-size:11px;color:#0284c7;font-weight:600">${esc(c.interviewTime || '11:00 AM')} · ${esc(c.interviewMode || 'Offline')}</div>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
       <td>${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</td>
       <td class="acts" onclick="event.stopPropagation()">
         <div class="vactions" style="justify-content:flex-end">
           <button class="btn btn-sm" style="background:rgba(2,132,199,0.12);color:#0284c7;font-weight:700" data-action="cand-view" data-id="${esc(c.id)}" title="Open Full Candidate Application Dossier">👁️ View</button>
+          ${(c.interviewDate || c.status === 'Interview Scheduled') ? `<a class="btn btn-sm" style="background:#e0f2fe;color:#0284c7;font-weight:700" href="/api/candidates/${esc(c.id)}/interview-letter" target="_blank" rel="noopener" title="Open Interview Call Letter PDF">📄 Letter</a>` : ''}
           ${(c.status === 'Selected' || c.status === 'Offer Sent')
             ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
                <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${esc(c.id)}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
             : c.status === 'Joined / Converted'
             ? `<span style="font-size:12px;font-weight:800;color:#16a34a;padding:4px 8px">✓ Onboarded</span>`
-            : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 Interview</button>
+            : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 ${c.interviewDate ? 'Reschedule' : 'Interview'}</button>
                <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select</button>`}
           <button class="btn btn-sm btn-outline" data-action="cand-edit" data-id="${esc(c.id)}">Edit</button>
         </div>
@@ -1416,14 +1420,65 @@ ACT['cand-edit'] = el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);
   if (c) candidateForm(c);
 };
-ACT['cand-schedule'] = async el => {
+function openScheduleInterviewModal(c) {
+  const compAddr = 'Sharmik Vihar, Sec 31, Faridabad, Haryana - 121003';
+  openForm({
+    title: `📅 Schedule Interview & Send Call Letter — ${c.name}`,
+    wide: true,
+    sub: `Candidate ke email (${c.email || 'not recorded'}) par official Interview Call Letter PDF aur invitation email direct send hoga.`,
+    fields: [
+      { type: 'heading', label: '1. Interview Date & Time' },
+      { name: 'interviewDate', label: 'Interview Date', type: 'date', required: true, value: c.interviewDate || today() },
+      { name: 'interviewTime', label: 'Interview Time', required: true, placeholder: 'e.g. 11:00 AM (IST)', value: c.interviewTime || '11:00 AM' },
+      { name: 'interviewMode', label: 'Interview Mode', type: 'select', options: ['Offline (In-Person)', 'Online (Google Meet / Video Call)'], value: c.interviewMode || 'Offline (In-Person)' },
+
+      { type: 'heading', label: '2. Location / Meeting Link & Panel' },
+      { name: 'interviewLocation', label: 'Interview Location / Meeting Link', full: true, required: true, placeholder: compAddr, value: c.interviewLocation || compAddr },
+      { name: 'interviewer', label: 'Interviewer Name / Panel', required: true, value: c.interviewer || 'Vivek Kumar Bhardwaj / HR Team' },
+
+      { type: 'heading', label: '3. Special Instructions & Remarks' },
+      { name: 'notes', label: 'Special Instructions / Notes for Candidate (Optional)', type: 'textarea', rows: 2, placeholder: 'e.g. Please bring your updated resume, photo ID, and academic certificates.', value: c.notes || '' }
+    ],
+    values: c,
+    onSubmit: async v => {
+      if (!c.email) throw new UserError('Candidate ka email recorded nahi hai. Pehle Candidate Edit karke email enter karein.');
+      toast('Interview schedule ho raha hai aur Call Letter PDF candidate ko send ho raha hai...', 'info');
+      try {
+        const res = await api('POST', `/api/candidates/${encodeURIComponent(c.id)}/schedule-interview`, v);
+        Object.assign(c, v, { status: 'Interview Scheduled', interviewSentAt: Date.now() });
+        toast(`✓ Interview scheduled & Call Letter PDF sent to ${c.email}!`, 'good');
+        await refresh();
+      } catch (err) {
+        toast('Interview scheduling error: ' + err.message, 'bad');
+      }
+    }
+  });
+
+  // Dynamic location switcher based on mode
+  setTimeout(() => {
+    const modeSel = document.querySelector('#dlgForm select[name="interviewMode"]');
+    const locInp = document.querySelector('#dlgForm [name="interviewLocation"]');
+    if (!modeSel || !locInp) return;
+    modeSel.addEventListener('change', () => {
+      if (modeSel.value.includes('Online')) {
+        if (!locInp.value || locInp.value === compAddr) {
+          locInp.value = 'Online Video Call: Google Meet (Meeting link will be shared 30 mins before interview)';
+        }
+      } else {
+        if (locInp.value.includes('Online') || locInp.value.includes('Google Meet')) {
+          locInp.value = compAddr;
+        }
+      }
+    });
+  }, 50);
+}
+
+ACT['cand-schedule'] = el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);
-  if (!c) return;
-  const d = prompt('Interview Date & Time enter karein (YYYY-MM-DD HH:MM):', c.interviewDate || today());
-  if (d) {
-    await dbUpdate('candidates', c.id, { interviewDate: d, status: 'Interview Scheduled' });
-    toast('Interview scheduled for ' + c.name, 'good');
-  }
+  if (c) openScheduleInterviewModal(c);
+};
+ACT['cand-interview-pdf'] = el => {
+  window.open(`/api/candidates/${encodeURIComponent(el.dataset.id)}/interview-letter`, '_blank');
 };
 ACT['cand-select'] = async el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);

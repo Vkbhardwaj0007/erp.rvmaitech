@@ -1298,6 +1298,212 @@ route('POST', '/api/candidates/:id/resume', { mod: ['hrms'] }, async ({ req, res
   send(res, 201, { ok: true, resumeId: id, resumeName: name });
 });
 
+/* ---- Schedule Interview & Dispatch Official Call Letter PDF & Email ---- */
+route('POST', '/api/candidates/:id/schedule-interview', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
+  db().candidates = db().candidates || [];
+  const cand = db().candidates.find(c => c.id === params.id);
+  if (!cand) throw new HttpError(404, 'Candidate not found.');
+  if (!cand.email) throw new HttpError(400, 'Candidate does not have an email address recorded. Please add an email in candidate details first.');
+
+  const b = await readJson(req);
+  cand.status = 'Interview Scheduled';
+  cand.interviewDate = String(b.interviewDate || cand.interviewDate || today()).trim();
+  cand.interviewTime = String(b.interviewTime || cand.interviewTime || '11:00 AM').trim();
+  cand.interviewMode = String(b.interviewMode || cand.interviewMode || 'Offline (In-Person)').trim();
+  cand.interviewLocation = String(b.interviewLocation || cand.interviewLocation || db().company.address || 'Sharmik Vihar, Sec 31, Faridabad, Haryana - 121003').trim();
+  cand.interviewer = String(b.interviewer || cand.interviewer || 'Vivek Kumar Bhardwaj / HR Team').trim();
+  if (b.notes !== undefined) cand.notes = String(b.notes || '').trim();
+  cand.interviewSentAt = Date.now();
+
+  let interviewPdf = null;
+  try {
+    interviewPdf = await pdfGen.generateInterviewLetterPdf(cand, db().company);
+  } catch (err) {
+    console.error('Interview PDF generation error:', err);
+  }
+
+  const pdfFileName = `Interview_Call_Letter_${cand.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+  const subject = `Interview Invitation from RvmAiTech - ${cand.role || 'Position'} | ${cand.name}`;
+
+  const bodyText = `Dear ${cand.name},
+
+Greetings from RvmAiTech!
+
+We are pleased to inform you that your application for the position of ${cand.role || 'Staff'} has been shortlisted.
+We would like to invite you for an interview. Please find the interview details below:
+
+Interview Details
+Company: RvmAiTech
+Position: ${cand.role || 'Staff'}
+Interview Date: ${fmtDate(cand.interviewDate)}
+Interview Time: ${cand.interviewTime || '11:00 AM'}
+Interview Mode: ${cand.interviewMode || 'Offline (In-Person)'}
+Interview Location: ${cand.interviewLocation}
+Interviewer: ${cand.interviewer}
+
+Important Instructions:
+• Please join or arrive 10–15 minutes before the scheduled time.
+• Keep your updated resume/CV ready.
+• Carry relevant documents and certificates if attending offline.
+• Please ensure a stable internet connection for an online interview.
+• If you are unable to attend at the scheduled time, inform us in advance.
+• Kindly reply to this email to confirm your availability.
+
+We look forward to meeting you.
+
+Best Regards,
+HR Department
+RvmAiTech
+Email: rvmaitech2026@gmail.com
+WhatsApp: 7052050656
+Smart Solutions. Intelligent Automation. Reliable Technology.
+`;
+
+  const htmlBody = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background: #f8fafc; margin: 0; padding: 20px; line-height: 1.6; }
+.card { max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+.header { background: linear-gradient(135deg, #0d2649 0%, #0284c7 100%); padding: 24px 28px; color: #ffffff; }
+.header h1 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+.header p { margin: 4px 0 0; font-size: 13px; color: #bae6fd; }
+.content { padding: 26px 28px; }
+.salutation { font-size: 15.5px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+.msg { font-size: 13.5px; color: #334155; margin-bottom: 20px; }
+.details-box { background: #f0f9ff; border: 1.5px solid #0284c7; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+.details-title { font-size: 13.5px; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; border-bottom: 1px solid #bae6fd; padding-bottom: 6px; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table td { padding: 5px 0; vertical-align: top; }
+.table td.lbl { width: 140px; font-weight: 700; color: #0369a1; }
+.table td.val { font-weight: 600; color: #0f172a; }
+.inst-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+.inst-title { font-size: 13px; font-weight: 800; color: #0d2649; text-transform: uppercase; margin-bottom: 8px; }
+.inst-list { margin: 0; padding-left: 20px; font-size: 13px; color: #334155; }
+.inst-list li { margin-bottom: 5px; }
+.footer { background: #f1f5f9; padding: 18px 28px; font-size: 12px; color: #475569; border-top: 1px solid #e2e8f0; }
+.footer b { color: #0d2649; }
+.tagline { color: #0284c7; font-weight: 700; font-size: 11.5px; margin-top: 6px; }
+</style></head>
+<body>
+<div class="card">
+  <div class="header">
+    <h1>RvmAiTech Solutions</h1>
+    <p>Official Interview Invitation & Shortlisting Notification</p>
+  </div>
+  <div class="content">
+    <div class="salutation">Dear ${cand.name},</div>
+    <div class="msg">
+      Greetings from <b>RvmAiTech</b>!<br><br>
+      We are pleased to inform you that your application for the position of <b>${cand.role || 'Staff'}</b> has been shortlisted.<br>
+      We would like to invite you for an interview. Please find the interview details below:
+    </div>
+
+    <div class="details-box">
+      <div class="details-title">📅 Interview Details</div>
+      <table class="table">
+        <tr><td class="lbl">Company:</td><td class="val">RvmAiTech Solutions Private Limited</td></tr>
+        <tr><td class="lbl">Position:</td><td class="val">${cand.role || 'Staff'}</td></tr>
+        <tr><td class="lbl">Interview Date:</td><td class="val">${fmtDate(cand.interviewDate)}</td></tr>
+        <tr><td class="lbl">Interview Time:</td><td class="val">${cand.interviewTime || '11:00 AM'}</td></tr>
+        <tr><td class="lbl">Interview Mode:</td><td class="val">${cand.interviewMode || 'Offline (In-Person)'}</td></tr>
+        <tr><td class="lbl">Interview Location:</td><td class="val">${cand.interviewLocation}</td></tr>
+        <tr><td class="lbl">Interviewer:</td><td class="val">${cand.interviewer}</td></tr>
+        ${cand.notes ? `<tr><td class="lbl">Special Note:</td><td class="val">${cand.notes}</td></tr>` : ''}
+      </table>
+    </div>
+
+    <div class="inst-box">
+      <div class="inst-title">📋 Important Instructions:</div>
+      <ul class="inst-list">
+        <li>Please join or arrive 10–15 minutes before the scheduled time.</li>
+        <li>Keep your updated resume/CV ready.</li>
+        <li>Carry relevant documents and certificates if attending offline.</li>
+        <li>Please ensure a stable internet connection for an online interview.</li>
+        <li>If you are unable to attend at the scheduled time, inform us in advance.</li>
+        <li><b>Kindly reply to this email to confirm your availability.</b></li>
+      </ul>
+    </div>
+
+    <p style="font-size:13px;color:#334155;margin:0 0 14px;">
+      <b>Attached Document:</b> Official signed PDF Call Letter (<b>${pdfFileName}</b>) is attached with this email for your records and security gate entry.
+    </p>
+
+    <p style="font-size:13.5px;color:#0f172a;margin:0;">
+      We look forward to meeting you.<br><br>
+      Best Regards,<br>
+      <b>HR Department</b><br>
+      RvmAiTech
+    </p>
+  </div>
+  <div class="footer">
+    <b>Email:</b> <a href="mailto:rvmaitech2026@gmail.com">rvmaitech2026@gmail.com</a> | <b>WhatsApp:</b> 7052050656<br>
+    <b>Office Address:</b> Sharmik Vihar, Sec 31, Faridabad, Haryana - 121003<br>
+    <div class="tagline">Smart Solutions. Intelligent Automation. Reliable Technology.</div>
+  </div>
+</div>
+</body></html>`;
+
+  const attachments = [];
+  if (interviewPdf) {
+    attachments.push({
+      filename: pdfFileName,
+      content: interviewPdf,
+      contentType: 'application/pdf'
+    });
+  }
+
+  let emailSent = false, emailError = null;
+  try {
+    const smtpRes = await sendGmailSmtp({
+      to: cand.email,
+      subject,
+      text: bodyText,
+      html: htmlBody,
+      from: SENDER_EMAIL,
+      attachments
+    });
+    emailSent = !!(smtpRes && smtpRes.ok);
+    if (!emailSent && smtpRes && smtpRes.error) emailError = smtpRes.error;
+  } catch (mErr) {
+    console.error('SMTP interview invite error:', mErr);
+    emailError = mErr.message;
+  }
+
+  db().emailOutbox = db().emailOutbox || [];
+  db().emailOutbox.push({
+    id: newId('em'),
+    to: cand.email,
+    recipientName: cand.name,
+    subject,
+    body: bodyText,
+    sentAt: Date.now(),
+    status: emailSent ? 'Sent' : 'Failed',
+    error: emailError,
+    type: 'Interview Invitation',
+    attachmentsCount: attachments.length
+  });
+
+  await store.save();
+  send(res, 200, { ok: true, emailSent, emailError, interviewDate: cand.interviewDate, interviewTime: cand.interviewTime });
+});
+
+route('GET', '/api/candidates/:id/interview-letter', { open: true }, async ({ req, res, params }) => {
+  db().candidates = db().candidates || [];
+  const cand = db().candidates.find(c => c.id === params.id);
+  if (!cand) throw new HttpError(404, 'Candidate not found.');
+
+  const pdf = await pdfGen.generateInterviewLetterPdf(cand, db().company);
+  const pdfName = `Interview_Call_Letter_${cand.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+  res.removeHeader('Content-Security-Policy');
+  res.writeHead(200, {
+    'Content-Type': 'application/pdf',
+    'Content-Length': pdf.length,
+    'Cache-Control': 'private, max-age=300',
+    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(pdfName)}`
+  });
+  res.end(pdf);
+});
+
 route('POST', '/api/candidates/:id/send-offer', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
   db().candidates = db().candidates || [];
   const cand = db().candidates.find(c => c.id === params.id);
