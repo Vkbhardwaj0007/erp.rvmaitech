@@ -204,6 +204,9 @@ window.downloadPdf = function(url, filename) {
 };
 
 function fieldHtml(f, v) {
+  if (f.type === 'heading') {
+    return `<div class="field field-full" style="grid-column:1/-1;margin-top:16px;margin-bottom:6px;padding-bottom:6px;border-bottom:1.5px solid var(--rule);"><h3 style="margin:0;font-size:14px;font-weight:900;color:var(--ink);">${esc(f.label)}</h3>${f.hint ? `<p style="margin:2px 0 0;font-size:12px;color:var(--ink-2);">${esc(f.hint)}</p>` : ''}</div>`;
+  }
   const id = 'f-' + f.name;
   const val = v == null ? (f.value == null ? '' : f.value) : v;
   const req = f.required ? ' required' : '';
@@ -224,6 +227,7 @@ function fieldHtml(f, v) {
 function readForm(form, fields) {
   const fd = new FormData(form), out = {};
   for (const f of fields) {
+    if (f.type === 'heading') continue;
     if (f.type === 'checks') { out[f.name] = fd.getAll(f.name).map(String); continue; }
     const raw = String(fd.get(f.name) == null ? '' : fd.get(f.name));
     out[f.name] = f.type === 'number' ? num(raw) : f.type === 'password' ? raw : raw.trim();

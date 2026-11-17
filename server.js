@@ -9,6 +9,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const zlib = require('zlib');
 
 /* Load .env file if present */
 try {
@@ -456,6 +457,32 @@ route('POST', '/api/c/:col', {}, async ({ req, res, user, params }) => {
   if (spec.check) spec.check(doc, ctx);
   doc.id = newId(spec.prefix); doc.createdAt = Date.now(); doc.createdBy = user.id;
   db()[params.col].push(doc);
+
+  if (params.col === 'employees' && doc.candidateId) {
+    const cand = (db().candidates || []).find(c => c.id === doc.candidateId);
+    if (cand) {
+      cand.status = 'Joined / Converted';
+      cand.convertedEmpId = doc.id;
+      cand.joinedAt = Date.now();
+      if (cand.resumeId) {
+        const rFile = (db().files || []).find(f => f.id === cand.resumeId);
+        if (rFile && !db().files.some(f => f.employeeId === doc.id && f.kind === 'Resume')) {
+          db().files.push({
+            id: newId('f'),
+            employeeId: doc.id,
+            kind: 'Resume',
+            name: rFile.name || 'Resume.pdf',
+            mime: rFile.mime,
+            size: rFile.size,
+            stored: rFile.stored,
+            uploadedAt: Date.now(),
+            uploadedBy: user.id
+          });
+        }
+      }
+    }
+  }
+
   await store.save();
   send(res, 201, { id: doc.id });
 });
@@ -540,6 +567,51 @@ function sniff(buf) {
   if (buf.length > 5 && buf.toString('latin1', 0, 5) === '%PDF-') return ['application/pdf', 'pdf'];
   return null;
 }
+
+function extractAadhaarDetails(buf, mime) {
+  let text = '';
+  try {
+    if (mime === 'application/pdf') {
+      const raw = buf.toString('latin1');
+      text += ' ' + raw;
+      const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+      let m;
+      while ((m = streamRegex.exec(raw)) !== null) {
+        try {
+          const inflated = zlib.inflateSync(Buffer.from(m[1], 'latin1')).toString('utf-8');
+          text += ' ' + inflated;
+        } catch (_) {}
+      }
+    } else {
+      text = buf.toString('utf-8', 0, Math.min(buf.length, 65536));
+    }
+  } catch (err) {
+    console.warn('Aadhaar extraction parse error:', err);
+  }
+
+  let aadhaarNo = null;
+  const noMatch = text.match(/\b([2-9]\d{3}\s\d{4}\s\d{4})\b/) || text.match(/\b([2-9]\d{11})\b/);
+  if (noMatch) {
+    const rawNo = noMatch[1].replace(/\s+/g, '');
+    aadhaarNo = rawNo.slice(0, 4) + ' ' + rawNo.slice(4, 8) + ' ' + rawNo.slice(8, 12);
+  }
+
+  let address = null;
+  const addrMatch = text.match(/(?:Address[:\s]|To[:\s]|S\/O[:\s]|D\/O[:\s]|W\/O[:\s]|C\/O[:\s])([\s\S]{15,300}?\b[1-9]\d{5}\b)/i);
+  if (addrMatch) {
+    address = addrMatch[1]
+      .replace(/[\r\n\t]+/g, ', ')
+      .replace(/[()\\/]/g, ' ')
+      .replace(/\s+,/g, ',')
+      .replace(/,\s*,/g, ',')
+      .replace(/\s+/g, ' ')
+      .replace(/^[:\s,]+/, '')
+      .trim();
+  }
+
+  return { aadhaarNo, address };
+}
+
 route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, query }) => {
   if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && user.empId === params.id)) {
     throw new HttpError(403, 'You are not allowed to upload files for this employee.');
@@ -561,10 +633,33 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
     if (old) await removeFile(old);
     emp.photoId = id;
   }
+
+  let extractedAddress = null;
+  let extractedAadhaarNo = null;
+  if (/aadhaar|adhar/i.test(kind)) {
+    try {
+      const ext = extractAadhaarDetails(buf, type[0]);
+      if (ext.address) {
+        extractedAddress = ext.address;
+        emp.permAddress = ext.address;
+      }
+      if (ext.aadhaarNo) {
+        extractedAadhaarNo = ext.aadhaarNo;
+        emp.aadhaarNumber = ext.aadhaarNo;
+        if (!emp.idNumber) {
+          emp.idNumber = ext.aadhaarNo;
+          emp.idType = 'Aadhaar';
+        }
+      }
+    } catch (e) {
+      console.warn('Aadhaar extraction parse error:', e);
+    }
+  }
+
   db().files.push(file);
   delete emp.sample;
   await store.save();
-  send(res, 201, { id });
+  send(res, 201, { id, extractedAddress, extractedAadhaarNo, permAddress: emp.permAddress });
 });
 route('GET', '/api/files/:id', {}, async ({ req, res, user, params }) => {
   const f = db().files.find(x => x.id === params.id);
@@ -588,6 +683,78 @@ route('DELETE', '/api/files/:id', {}, async ({ res, user, params }) => {
   await removeFile(f);
   await store.save();
   send(res, 200, { ok: true });
+});
+
+/* ---- employee KYC verification and update ---- */
+route('POST', '/api/employees/:id/kyc', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
+  const emp = findDoc('employees', params.id);
+  const b = await readJson(req);
+  if (b.parentsName !== undefined) emp.parentsName = String(b.parentsName || '').trim();
+  if (b.parentsPhone !== undefined) emp.parentsPhone = String(b.parentsPhone || '').trim();
+  if (b.siblingName !== undefined) emp.siblingName = String(b.siblingName || '').trim();
+  if (b.siblingPhone !== undefined) emp.siblingPhone = String(b.siblingPhone || '').trim();
+  if (b.livingStatus !== undefined) emp.livingStatus = String(b.livingStatus || 'Own House').trim();
+  if (b.roomOwnerName !== undefined) emp.roomOwnerName = String(b.roomOwnerName || '').trim();
+  if (b.roomOwnerPhone !== undefined) emp.roomOwnerPhone = String(b.roomOwnerPhone || '').trim();
+  if (b.roomAddress !== undefined) emp.roomAddress = String(b.roomAddress || '').trim();
+  if (b.bankName !== undefined) emp.bankName = String(b.bankName || '').trim();
+  if (b.bankAccount !== undefined) emp.bankAccount = String(b.bankAccount || '').trim();
+  if (b.bankIfsc !== undefined) emp.bankIfsc = String(b.bankIfsc || '').trim().toUpperCase();
+  if (b.bankAccountHolder !== undefined) emp.bankAccountHolder = String(b.bankAccountHolder || '').trim();
+  if (b.panNumber !== undefined) emp.panNumber = String(b.panNumber || '').trim().toUpperCase();
+  if (b.aadhaarNumber !== undefined) emp.aadhaarNumber = String(b.aadhaarNumber || '').trim();
+  if (b.uanNumber !== undefined) emp.uanNumber = String(b.uanNumber || '').trim();
+  if (b.esicNumber !== undefined) emp.esicNumber = String(b.esicNumber || '').trim();
+  if (b.highestCollege !== undefined) emp.highestCollege = String(b.highestCollege || '').trim();
+  if (b.permAddress !== undefined && b.permAddress) emp.permAddress = String(b.permAddress || '').trim();
+  if (b.address !== undefined && b.address) emp.address = String(b.address || '').trim();
+  if (b.kycNotes !== undefined) emp.kycNotes = String(b.kycNotes || '').trim();
+  if (b.kycStatus !== undefined) emp.kycStatus = String(b.kycStatus || 'Pending Verification').trim();
+  delete emp.sample;
+  await store.save();
+  send(res, 200, { ok: true, emp });
+});
+
+route('POST', '/api/employees/:id/kyc/verify', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
+  const emp = findDoc('employees', params.id);
+  emp.kycStatus = 'Verified & Cleared';
+  emp.kycVerifiedAt = today();
+  emp.kycVerifiedBy = user.name || 'HR Operations';
+  delete emp.sample;
+  await store.save();
+  send(res, 200, { ok: true, kycStatus: emp.kycStatus, kycVerifiedAt: emp.kycVerifiedAt, kycVerifiedBy: emp.kycVerifiedBy });
+});
+
+route('POST', '/api/employees/:id/kyc/sync-aadhaar', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
+  const emp = findDoc('employees', params.id);
+  const aadhaarFiles = (db().files || []).filter(f => f.employeeId === emp.id && /aadhaar|adhar/i.test(f.kind));
+  if (!aadhaarFiles.length) throw new HttpError(404, 'No Aadhaar document found for this employee. Please upload an Aadhaar card first.');
+  let extracted = null;
+  for (const f of aadhaarFiles) {
+    const full = path.join(UPLOADS, f.stored);
+    if (fs.existsSync(full)) {
+      const buf = await fsp.readFile(full);
+      const ext = extractAadhaarDetails(buf, f.mime);
+      if (ext.address || ext.aadhaarNo) {
+        extracted = ext;
+        if (ext.address) emp.permAddress = ext.address;
+        if (ext.aadhaarNo) {
+          emp.aadhaarNumber = ext.aadhaarNo;
+          if (!emp.idNumber) {
+            emp.idNumber = ext.aadhaarNo;
+            emp.idType = 'Aadhaar';
+          }
+        }
+        break;
+      }
+    }
+  }
+  if (!extracted || !extracted.address) {
+    throw new HttpError(400, 'Could not detect text address automatically from the uploaded Aadhaar file. Please enter the permanent address manually.');
+  }
+  delete emp.sample;
+  await store.save();
+  send(res, 200, { ok: true, address: emp.permAddress, aadhaarNo: emp.aadhaarNumber });
 });
 
 /* ---- employee self-service and credentials ---- */

@@ -1168,29 +1168,67 @@ V['hr-employees'] = D => {
 };
 
 function employeeForm(e) {
+  const selectedCands = (S.candidates || []).filter(c => c.status === 'Selected' || c.status === 'Offer Sent' || c.status === 'Offer Accepted');
+  const otherCands = (S.candidates || []).filter(c => !selectedCands.includes(c) && c.status !== 'Joined / Converted' && c.status !== 'Rejected');
+  const candOptions = [
+    { value: '', label: '-- Direct Employee Registration (No Candidate) --' },
+    ...selectedCands.map(c => ({ value: c.id, label: `★ [Selected] ${c.name} (${c.role || 'Staff'})` })),
+    ...otherCands.map(c => ({ value: c.id, label: `${c.name} (${c.role || 'Staff'} · ${c.status})` }))
+  ];
+
   openForm({
-    title: e ? 'Edit Employee Details' : 'Add Employee (Role, Expected & Agreed Salary)',
+    title: e ? 'Edit Employee & KYC Details' : 'Register Employee (Candidate Onboarding & KYC)',
     wide: true,
-    sub: e ? '' : 'Name, Role, Expected Salary aur Email enter karein. Save hote hi Portal Login generate hoga aur aap Profile me Original Documents upload karke ID Card nikaal sakenge.',
+    sub: e ? '' : 'Candidate select karke data auto-fill karein ya manually enter karein. Save hote hi Portal Login banega aur Welcome email send hoga.',
     fields: [
+      ...(!e ? [
+        { type: 'heading', label: '🎯 1. Select Candidate (Auto-fill from Selected / Offered Candidates)', hint: 'Selecting a candidate will automatically fill their Name, Role, Dept, Salary, Contacts, Qualification and Address' },
+        { name: 'candidateId', label: 'Candidate Selection', type: 'select', full: true, options: candOptions, value: '' }
+      ] : []),
+      { type: 'heading', label: '📋 2. Basic Employment & Designation Details' },
       { name: 'code', label: 'Employee Code', required: true, value: e ? e.code : nextNo('EMP-', S.employees, 'code', 3) },
-      { name: 'name', label: 'Full Name', required: true, placeholder: 'e.g. Rahul Sharma' },
-      { name: 'role', label: 'Role / Designation (kis role ke liye hai)', required: true, placeholder: 'e.g. Software Engineer, Sales Executive' },
-      { name: 'email', label: 'Email (login credentials will be sent here)', type: 'email', required: true, placeholder: 'rahul@example.com' },
-      { name: 'phone', label: 'Phone Number', type: 'tel', placeholder: '+91 9876543210' },
-      { name: 'dept', label: 'Department', placeholder: 'IT, Sales, Operations, Accounts' },
+      { name: 'name', label: 'Full Legal Name', required: true, placeholder: 'e.g. Rahul Sharma' },
+      { name: 'role', label: 'Role / Designation', required: true, placeholder: 'e.g. IOT Engineer, Embedded Developer' },
+      { name: 'dept', label: 'Department', placeholder: 'R&D, Engineering, Operations, Sales' },
+      { name: 'email', label: 'Official / Login Email', type: 'email', required: true, placeholder: 'rahul@example.com' },
+      { name: 'phone', label: 'Mobile Number', type: 'tel', placeholder: '+91 9876543210' },
       { name: 'joined', label: 'Date of Joining', type: 'date', required: true, value: e ? e.joined : today() },
-      { name: 'expectedSalary', label: 'Candidate Expected Salary per month (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 35000', value: e ? (e.expectedSalary || '') : '' },
       { name: 'salary', label: 'Agreed / Offered Gross Salary per month (₹)', type: 'number', min: 0, step: 'any', required: true, value: e ? e.salary : 25000 },
+      { name: 'expectedSalary', label: 'Candidate Expected Salary per month (₹)', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 30000', value: e ? (e.expectedSalary || '') : '' },
       { name: 'bloodGroup', label: 'Blood Group', placeholder: 'O+, A+, B+, AB+' },
-      { name: 'status', label: 'Status', type: 'select', options: ['Active', 'Registered', 'Left'], value: e ? e.status : 'Registered' },
+      { name: 'status', label: 'Status', type: 'select', options: ['Registered', 'Active', 'Left'], value: e ? e.status : 'Registered' },
       { name: 'dob', label: 'Date of Birth', type: 'date', max: today() },
-      { name: 'address', label: 'Current Address', type: 'textarea', rows: 2, maxlength: 300 },
-      { name: 'permAddress', label: 'Permanent Address', type: 'textarea', rows: 2, maxlength: 300 },
-      { name: 'idType', label: 'ID Proof Type', type: 'select', placeholder: 'Choose ID type', options: ID_TYPES },
-      { name: 'idNumber', label: 'ID Proof Number', maxlength: 40 },
-      { name: 'emergencyName', label: 'Emergency Contact Person', maxlength: 80 },
-      { name: 'emergencyPhone', label: 'Emergency Phone Number', type: 'tel' }
+
+      { type: 'heading', label: '🎓 3. Education, Aadhaar & Identity Proofs' },
+      { name: 'highestCollege', label: 'Highest College / Degree / Certificate', placeholder: 'e.g. B.Tech (ECE) - RTU Kota', full: true },
+      { name: 'aadhaarNumber', label: 'Aadhaar Card Number (12 Digits)', placeholder: 'XXXX XXXX XXXX' },
+      { name: 'panNumber', label: 'PAN Card Number', placeholder: 'ABCDE1234F' },
+      { name: 'uanNumber', label: 'UAN / PF Number (Optional)', placeholder: '101234567890' },
+      { name: 'esicNumber', label: 'ESIC IP Number (Optional)', placeholder: '12345678901234567' },
+
+      { type: 'heading', label: '📍 4. Residential Addresses' },
+      { name: 'address', label: 'Current Address', type: 'textarea', rows: 2, maxlength: 300, placeholder: 'Current living address' },
+      { name: 'permAddress', label: 'Permanent Address (Auto-extracted from Aadhaar Card upon upload)', type: 'textarea', rows: 2, maxlength: 300, placeholder: 'Permanent hometown address per Aadhaar' },
+
+      { type: 'heading', label: '🏦 5. Bank Account Details (for Direct Salary Credit)' },
+      { name: 'bankName', label: 'Bank Name', placeholder: 'e.g. HDFC Bank, SBI, ICICI' },
+      { name: 'bankAccount', label: 'Bank Account Number', placeholder: 'e.g. 5010048892110' },
+      { name: 'bankIfsc', label: 'Bank IFSC Code', placeholder: 'e.g. HDFC0001234' },
+      { name: 'bankAccountHolder', label: 'Account Holder Legal Name', placeholder: 'Same as PAN / Bank passbook' },
+
+      { type: 'heading', label: '👨‍👩‍👧 6. Family & Emergency Verification Contacts' },
+      { name: 'parentsName', label: 'Parents Name (Father / Mother)', placeholder: 'e.g. Ramesh Kumar' },
+      { name: 'parentsPhone', label: 'Parents Contact Phone Number', type: 'tel', placeholder: '+91 9876500000' },
+      { name: 'siblingName', label: 'Brother / Sister Name', placeholder: 'e.g. Priya Sharma' },
+      { name: 'siblingPhone', label: 'Brother / Sister Phone Number', type: 'tel', placeholder: '+91 9876500001' },
+      { name: 'emergencyName', label: 'Primary Emergency Contact Person', maxlength: 80, placeholder: 'Relative / Guardian' },
+      { name: 'emergencyPhone', label: 'Emergency Contact Phone Number', type: 'tel' },
+
+      { type: 'heading', label: '🏠 7. Living Arrangement & Landlord Details' },
+      { name: 'livingStatus', label: 'Living Arrangement', type: 'select', options: ['Own House', 'Rented Room / PG'], value: e ? (e.livingStatus || 'Own House') : 'Own House' },
+      { name: 'roomOwnerName', label: 'Room Owner / Landlord Name (if Rented)', placeholder: 'Landlord full name' },
+      { name: 'roomOwnerPhone', label: 'Room Owner / Landlord Phone Number (if Rented)', type: 'tel', placeholder: '+91 9876500002' },
+      { name: 'roomAddress', label: 'Rented Room / PG Address (if Rented)', type: 'textarea', rows: 2, maxlength: 300, placeholder: 'Room / PG number, street, landmark, city' }
     ],
     values: e || {},
     onSubmit: async v => {
@@ -1199,6 +1237,21 @@ function employeeForm(e) {
         toast('Employee details updated');
       } else {
         const newId = await dbAdd('employees', v);
+        // If linked to candidate, update candidate
+        if (v.candidateId) {
+          const cand = (S.candidates || []).find(c => c.id === v.candidateId);
+          if (cand) {
+            cand.status = 'Joined / Converted';
+            cand.convertedEmpId = newId;
+            cand.joinedAt = Date.now();
+            await dbUpdate('candidates', cand.id, {
+              status: 'Joined / Converted',
+              convertedEmpId: newId,
+              joinedAt: Date.now()
+            }).catch(() => {});
+          }
+        }
+
         // Automatically generate portal login and credentials
         let creds = null, mailRes = null;
         try {
@@ -1224,6 +1277,42 @@ function employeeForm(e) {
       }
     }
   });
+
+  // Dynamic auto-fill listener for candidate dropdown
+  if (!e) {
+    setTimeout(() => {
+      const candSel = document.querySelector('#dlgForm select[name="candidateId"]');
+      if (!candSel) return;
+      candSel.addEventListener('change', () => {
+        const cId = candSel.value;
+        const c = (S.candidates || []).find(x => x.id === cId);
+        if (!c) return;
+        const setVal = (fieldName, val) => {
+          const inp = document.querySelector(`#dlgForm [name="${fieldName}"]`);
+          if (inp && val !== undefined && val !== null && val !== '') inp.value = val;
+        };
+        setVal('name', c.name);
+        setVal('role', c.role || c.appliedRole || '');
+        setVal('dept', c.dept || 'Engineering');
+        setVal('email', c.email);
+        setVal('phone', c.phone);
+        if (c.offeredSalary || c.expectedSalary) {
+          setVal('salary', c.offeredSalary || c.expectedSalary);
+        }
+        if (c.expectedSalary) {
+          setVal('expectedSalary', c.expectedSalary);
+        }
+        if (c.qualification) {
+          setVal('highestCollege', c.qualification);
+        }
+        if (c.address || c.currentLocation) {
+          setVal('address', c.address || c.currentLocation);
+          setVal('permAddress', c.address || c.currentLocation);
+        }
+        toast(`✨ Auto-filled data for candidate ${c.name}!`, 'good');
+      });
+    }, 50);
+  }
 }
 
 ACT['emp-new'] = () => employeeForm(null);
@@ -1513,6 +1602,187 @@ function profileView(D, e) {
         </div>
       </section>
 
+      <!-- Employee KYC & Statutory Verification Dossier -->
+      <section class="card" style="border:1.5px solid #0284c7;background:var(--sheet);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;border-bottom:1px solid var(--rule);padding-bottom:10px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <h2 style="margin:0;font-size:17px;font-weight:900;color:var(--ink);">🛡️ Employee KYC & Statutory Verification Dossier</h2>
+              ${e.kycStatus === 'Verified & Cleared'
+                ? `<span class="stamp stamp-good" style="font-size:11.5px;padding:3px 8px;">✓ KYC Verified & Cleared</span>`
+                : e.kycStatus === 'Under Review'
+                ? `<span class="stamp stamp-info" style="font-size:11.5px;padding:3px 8px;">⏳ Under Review</span>`
+                : `<span class="stamp stamp-warn" style="font-size:11.5px;padding:3px 8px;">⚠️ Pending Verification</span>`
+              }
+            </div>
+            <p class="card-sub" style="margin:2px 0 0;">Original documents, automatic Aadhaar permanent address extraction, family contacts, and landlord verification.</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${e.kycStatus !== 'Verified & Cleared' && W('hrms', `
+              <button class="btn btn-primary" data-action="emp-kyc-verify" data-id="${esc(e.id)}" style="background:#059669;border-color:#059669;font-weight:700;">✓ Approve & Clear KYC</button>
+            `)}
+            ${W('hrms', `
+              <button class="btn" data-action="emp-kyc-edit" data-id="${esc(e.id)}" style="font-weight:700;">✏️ Edit KYC Details</button>
+            `)}
+          </div>
+        </div>
+
+        <!-- 1. Mandatory Statutory Documents Grid -->
+        <div style="margin-bottom:16px;">
+          <h3 style="margin:0 0 8px;font-size:13.5px;font-weight:800;color:var(--ink);text-transform:uppercase;letter-spacing:0.04em;">1. Statutory Verification Documents</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
+            <!-- Aadhaar Card with Auto-Extraction -->
+            ${(() => {
+              const aadhaarFile = files.find(f => /aadhaar|adhar/i.test(f.kind));
+              return `
+              <div style="background:var(--paper);border:1.5px solid ${aadhaarFile ? '#86efac' : '#fdba74'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-size:13px;font-weight:800;color:var(--ink);">🪪 Aadhaar Card</span>
+                    ${aadhaarFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-warn" style="font-size:10.5px;">Missing ⚠️</span>`}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">UID: <b>${esc(e.aadhaarNumber || 'Not recorded')}</b></div>
+                  <div style="font-size:11px;color:#0284c7;margin-top:4px;background:#f0f9ff;padding:5px 8px;border-radius:6px;border:1px dashed #bae6fd;">
+                    <b>📍 Permanent Address (Aadhaar):</b><br>${esc(e.permAddress || 'Upload Aadhaar to auto-extract')}
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                  ${aadhaarFile ? `<a class="btn btn-sm" href="/api/files/${esc(aadhaarFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                  <label class="btn btn-sm btn-primary" for="up-aadhaar-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${aadhaarFile ? 'Re-upload' : '📤 Upload Aadhaar'}</label>
+                  <input type="file" id="up-aadhaar-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Aadhaar Card" accept="application/pdf,image/*" hidden>
+                  ${aadhaarFile ? `<button class="btn btn-sm" data-action="kyc-sync-aadhaar" data-id="${esc(e.id)}" title="Re-sync address from uploaded Aadhaar">🔄</button>` : ''}
+                </div>
+              </div>`;
+            })()}
+
+            <!-- PAN Card -->
+            ${(() => {
+              const panFile = files.find(f => /pan/i.test(f.kind));
+              return `
+              <div style="background:var(--paper);border:1.5px solid ${panFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-size:13px;font-weight:800;color:var(--ink);">💳 PAN Card</span>
+                    ${panFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">PAN No: <b>${esc(e.panNumber || e.idNumber || 'Not recorded')}</b></div>
+                  <div style="font-size:11px;color:var(--ink-2);margin-top:4px;">Required for income tax TDS deduction & payroll compliance.</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                  ${panFile ? `<a class="btn btn-sm" href="/api/files/${esc(panFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                  <label class="btn btn-sm btn-primary" for="up-pan-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${panFile ? 'Re-upload' : '📤 Upload PAN'}</label>
+                  <input type="file" id="up-pan-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="PAN Card" accept="application/pdf,image/*" hidden>
+                </div>
+              </div>`;
+            })()}
+
+            <!-- College / Degree Certificate -->
+            ${(() => {
+              const collegeFile = files.find(f => /college|degree|certificate/i.test(f.kind));
+              return `
+              <div style="background:var(--paper);border:1.5px solid ${collegeFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-size:13px;font-weight:800;color:var(--ink);">🎓 College / Degree</span>
+                    ${collegeFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Degree: <b>${esc(e.highestCollege || 'Not recorded')}</b></div>
+                  <div style="font-size:11px;color:var(--ink-2);margin-top:4px;">Highest educational degree, marksheet, or technical diploma.</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                  ${collegeFile ? `<a class="btn btn-sm" href="/api/files/${esc(collegeFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                  <label class="btn btn-sm btn-primary" for="up-col-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${collegeFile ? 'Re-upload' : '📤 Upload Certificate'}</label>
+                  <input type="file" id="up-col-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="College Certificate" accept="application/pdf,image/*" hidden>
+                </div>
+              </div>`;
+            })()}
+
+            <!-- Previous Relieving / Experience Letter -->
+            ${(() => {
+              const expFile = files.find(f => /experience|relieving/i.test(f.kind));
+              return `
+              <div style="background:var(--paper);border:1.5px solid ${expFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-size:13px;font-weight:800;color:var(--ink);">📜 Experience / Relieving</span>
+                    ${expFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Fresher / NA</span>`}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Prior employer relieving letter & service certificate.</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                  ${expFile ? `<a class="btn btn-sm" href="/api/files/${esc(expFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                  <label class="btn btn-sm" for="up-exp-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${expFile ? 'Re-upload' : '📤 Upload Relieving'}</label>
+                  <input type="file" id="up-exp-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Experience Letter" accept="application/pdf,image/*" hidden>
+                </div>
+              </div>`;
+            })()}
+
+            <!-- Rent Agreement (if rented) -->
+            ${(() => {
+              const rentFile = files.find(f => /rent/i.test(f.kind));
+              return `
+              <div style="background:var(--paper);border:1.5px solid ${rentFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-size:13px;font-weight:800;color:var(--ink);">🏠 Rent Agreement</span>
+                    ${rentFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : (e.livingStatus === 'Rented Room / PG' ? `<span class="stamp stamp-warn" style="font-size:10.5px;">Pending ⚠️</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Own House</span>`)}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Status: <b>${esc(e.livingStatus || 'Own House')}</b></div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                  ${rentFile ? `<a class="btn btn-sm" href="/api/files/${esc(rentFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                  <label class="btn btn-sm" for="up-rent-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${rentFile ? 'Re-upload' : '📤 Upload Agreement'}</label>
+                  <input type="file" id="up-rent-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Rent Agreement" accept="application/pdf,image/*" hidden>
+                </div>
+              </div>`;
+            })()}
+          </div>
+        </div>
+
+        <!-- 2. Family Contacts & Living Arrangement Split -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:12px;margin-bottom:12px;">
+          <!-- Family & Emergency Contacts -->
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;">
+            <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">👨‍👩‍👧 Family & Verification Contacts</div>
+            <dl class="facts" style="margin:0;">
+              ${fact('Parents (Father / Mother)', [e.parentsName, e.parentsPhone ? `<a href="tel:${esc(e.parentsPhone)}">${esc(e.parentsPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+              ${fact('Brother / Sister', [e.siblingName, e.siblingPhone ? `<a href="tel:${esc(e.siblingPhone)}">${esc(e.siblingPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+              ${fact('Primary Emergency Contact', [e.emergencyName, e.emergencyPhone ? `<a href="tel:${esc(e.emergencyPhone)}">${esc(e.emergencyPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+            </dl>
+          </div>
+
+          <!-- Living Arrangement & Landlord Details -->
+          <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;">
+            <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">🏠 Living Arrangement & Landlord</div>
+            <dl class="facts" style="margin:0;">
+              ${fact('Living Status', e.livingStatus || 'Own House')}
+              ${e.livingStatus === 'Rented Room / PG' ? `
+                ${fact('Room Owner / Landlord Name', e.roomOwnerName)}
+                ${fact('Landlord Phone Number', e.roomOwnerPhone ? `<a href="tel:${esc(e.roomOwnerPhone)}">${esc(e.roomOwnerPhone)}</a>` : '')}
+                ${fact('Rented Room / PG Address', e.roomAddress)}
+              ` : `
+                ${fact('Residential Status', 'Living in own family house (Permanent Address applies)')}
+              `}
+            </dl>
+          </div>
+        </div>
+
+        <!-- 3. Bank & Payroll Compliance Details -->
+        <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;">
+          <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">🏦 Bank Account & Statutory Identifiers</div>
+          <dl class="facts" style="margin:0;">
+            ${fact('Bank Name', e.bankName)}
+            ${fact('Bank Account Number', e.bankAccount)}
+            ${fact('IFSC Code', e.bankIfsc)}
+            ${fact('Account Holder Name', e.bankAccountHolder || e.name)}
+            ${fact('PAN Card Number', e.panNumber || e.idNumber)}
+            ${fact('Aadhaar Card Number', e.aadhaarNumber)}
+            ${fact('UAN / PF Number', e.uanNumber)}
+            ${fact('ESIC IP Number', e.esicNumber)}
+          </dl>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Job and Pay</h2>
         <p class="card-sub">Role, joining and salary.</p>
@@ -1573,7 +1843,12 @@ function profileView(D, e) {
 async function uploadFile(empId, kind, file) {
   if (!file) throw new UserError('Choose a file first.');
   if (file.size > 8 * 1024 * 1024) throw new UserError(`${file.name} is ${fileSize(file.size)}. The limit is 8 MB. Use a smaller photo or scan.`);
-  await api('POST', `/api/employees/${encodeURIComponent(empId)}/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, file, 'application/octet-stream');
+  const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, file, 'application/octet-stream');
+  if (res && res.extractedAddress) {
+    toast(`🪪 Permanent Address extracted from Aadhaar: "${res.extractedAddress}"!`, 'good');
+  } else if (/aadhaar|adhar/i.test(kind)) {
+    toast('Aadhaar card uploaded! Address recorded.', 'good');
+  }
   await refresh();
 }
 CHG['photo-pick'] = el => { const f = el.files[0]; if (f) save(() => uploadFile(el.dataset.id, 'photo', f), 'Photo saved'); };
@@ -1585,6 +1860,86 @@ ACT['doc-upload'] = el => {
 ACT['doc-del'] = async el => {
   const f = S.files.find(x => x.id === el.dataset.id); if (!f) return;
   if (await confirmBox('Delete this document?', `${f.name} (${f.kind}) will be deleted for good.`)) save(() => api('DELETE', '/api/files/' + encodeURIComponent(f.id)).then(refresh), 'Document deleted');
+};
+
+function openKycEditModal(e) {
+  openForm({
+    title: `Edit KYC & Statutory Verification — ${e.name} (${e.code})`,
+    wide: true,
+    sub: 'Update employee KYC statutory proofs, bank linkage, family contacts and residential landlord verification.',
+    fields: [
+      { type: 'heading', label: '🎓 1. Educational & Statutory Identifiers' },
+      { name: 'highestCollege', label: 'Highest College / Degree / Certificate', full: true, value: e.highestCollege || '' },
+      { name: 'aadhaarNumber', label: 'Aadhaar Card Number (12 Digits)', value: e.aadhaarNumber || '' },
+      { name: 'panNumber', label: 'PAN Card Number', value: e.panNumber || e.idNumber || '' },
+      { name: 'uanNumber', label: 'UAN / PF Number', value: e.uanNumber || '' },
+      { name: 'esicNumber', label: 'ESIC IP Number', value: e.esicNumber || '' },
+
+      { type: 'heading', label: '📍 2. Residential Addresses' },
+      { name: 'address', label: 'Current Address', type: 'textarea', rows: 2, maxlength: 300, value: e.address || '' },
+      { name: 'permAddress', label: 'Permanent Address (Aadhaar Verified)', type: 'textarea', rows: 2, maxlength: 300, value: e.permAddress || '' },
+
+      { type: 'heading', label: '🏦 3. Bank Account Details (for Salary Direct Credit)' },
+      { name: 'bankName', label: 'Bank Name', value: e.bankName || '' },
+      { name: 'bankAccount', label: 'Bank Account Number', value: e.bankAccount || '' },
+      { name: 'bankIfsc', label: 'Bank IFSC Code', value: e.bankIfsc || '' },
+      { name: 'bankAccountHolder', label: 'Account Holder Legal Name', value: e.bankAccountHolder || e.name || '' },
+
+      { type: 'heading', label: '👨‍👩‍👧 4. Family & Emergency Verification Contacts' },
+      { name: 'parentsName', label: 'Parents Name (Father / Mother)', value: e.parentsName || '' },
+      { name: 'parentsPhone', label: 'Parents Contact Phone Number', type: 'tel', value: e.parentsPhone || '' },
+      { name: 'siblingName', label: 'Brother / Sister Name', value: e.siblingName || '' },
+      { name: 'siblingPhone', label: 'Brother / Sister Phone Number', type: 'tel', value: e.siblingPhone || '' },
+      { name: 'emergencyName', label: 'Emergency Contact Person', value: e.emergencyName || '' },
+      { name: 'emergencyPhone', label: 'Emergency Contact Phone', type: 'tel', value: e.emergencyPhone || '' },
+
+      { type: 'heading', label: '🏠 5. Living Arrangement & Landlord Details' },
+      { name: 'livingStatus', label: 'Living Arrangement', type: 'select', options: ['Own House', 'Rented Room / PG'], value: e.livingStatus || 'Own House' },
+      { name: 'roomOwnerName', label: 'Room Owner / Landlord Name (if Rented)', value: e.roomOwnerName || '' },
+      { name: 'roomOwnerPhone', label: 'Room Owner / Landlord Phone (if Rented)', type: 'tel', value: e.roomOwnerPhone || '' },
+      { name: 'roomAddress', label: 'Rented Room Address (if Rented)', type: 'textarea', rows: 2, maxlength: 300, value: e.roomAddress || '' },
+
+      { type: 'heading', label: '🛡️ 6. KYC Verification Status' },
+      { name: 'kycStatus', label: 'KYC Status', type: 'select', options: ['Pending Verification', 'Under Review', 'Verified & Cleared', 'Rejected'], value: e.kycStatus || 'Pending Verification' },
+      { name: 'kycNotes', label: 'KYC Verification Remarks / Notes', type: 'textarea', rows: 2, maxlength: 500, value: e.kycNotes || '' }
+    ],
+    values: e,
+    onSubmit: async v => {
+      await api('POST', `/api/employees/${encodeURIComponent(e.id)}/kyc`, v);
+      toast('KYC details updated successfully!', 'good');
+      await refresh();
+    }
+  });
+}
+
+ACT['emp-kyc-verify'] = async el => {
+  const e = S.employees.find(x => x.id === el.dataset.id);
+  if (!e) return;
+  if (await confirmBox('Approve & Clear KYC?', `Confirm that all identity proofs, college certificates, family contacts, and bank details for ${e.name} (${e.code}) have been verified by HR?`, '✓ Approve KYC')) {
+    await api('POST', `/api/employees/${encodeURIComponent(e.id)}/kyc/verify`);
+    toast(`KYC for ${e.name} verified and cleared!`, 'good');
+    await refresh();
+  }
+};
+ACT['emp-kyc-edit'] = el => {
+  const e = S.employees.find(x => x.id === el.dataset.id);
+  if (e) openKycEditModal(e);
+};
+ACT['kyc-sync-aadhaar'] = async el => {
+  const empId = el.dataset.id;
+  try {
+    const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/kyc/sync-aadhaar`);
+    toast(`Permanent Address synced from Aadhaar: "${res.address}"`, 'good');
+    await refresh();
+  } catch (err) {
+    toast(err.message || 'Could not auto-extract address from Aadhaar.', 'warn');
+  }
+};
+CHG['kyc-quick-upload'] = el => {
+  const f = el.files[0];
+  const empId = el.dataset.id;
+  const kind = el.dataset.kind || 'Other';
+  if (f) save(() => uploadFile(empId, kind, f), `${kind} uploaded`);
 };
 
 /* ================= HRMS: Daily Work Reports ================= */
