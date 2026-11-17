@@ -267,11 +267,12 @@ async function runSubmit(form, fn, keepOpen) {
   }
   if (btn.isConnected) { btn.disabled = false; btn.textContent = label; }
 }
-function confirmBox(title, body, ok) {
+function confirmBox(title, body, ok, btnClass) {
   return new Promise(resolve => {
     let answer = false;
     dlg.className = 'dlg dlg-sm';
-    dlg.innerHTML = `<div class="form"><h2 class="dlg-title">${esc(title)}</h2><p class="dlg-body">${esc(body)}</p><div class="dlg-actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="button" class="btn btn-danger" id="dlgOk">${esc(ok || 'Delete')}</button></div></div>`;
+    const cls = btnClass || (ok && !ok.toLowerCase().includes('delete') && !ok.toLowerCase().includes('reject') ? 'btn btn-primary' : 'btn btn-danger');
+    dlg.innerHTML = `<div class="form"><h2 class="dlg-title">${esc(title)}</h2><p class="dlg-body">${esc(body)}</p><div class="dlg-actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="button" class="${cls}" id="dlgOk">${esc(ok || 'Delete')}</button></div></div>`;
     $('#dlgOk', dlg).addEventListener('click', () => { answer = true; closeDlg(); });
     dlg.addEventListener('close', () => resolve(answer), { once: true });
     dlg.showModal();

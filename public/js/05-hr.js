@@ -1149,7 +1149,7 @@ ACT['cand-select'] = async el => {
 ACT['cand-reject'] = async el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);
   if (!c) return;
-  if (await confirmBox('Reject Candidate?', `${c.name} ko reject mark karna chahte hain?`)) {
+  if (await confirmBox('Reject Candidate?', `${c.name} ko reject mark karna chahte hain?`, 'Reject Candidate', 'btn btn-danger')) {
     await dbUpdate('candidates', c.id, { status: 'Rejected' });
     toast('Candidate status updated to Rejected');
   }
@@ -1159,7 +1159,7 @@ ACT['cand-send-offer'] = async el => {
   if (!c) return;
   const email = c.email;
   if (!email) { alert('Candidate email missing!'); return; }
-  if (!await confirmBox('Send Job Offer & Joining Form?', `Selected candidate ${c.name} (${email}) ko official Offer Letter & Joining Form bhejna hai?\n\n(Note: Portal login password isme nahi jayega - login credentials kewal tab generate honge jab candidate company me aakar officially HRMS me Register hoga.)`)) return;
+  if (!await confirmBox('Send Job Offer & Joining Form?', `Selected candidate ${c.name} (${email}) ko official Offer Letter & Joining Form bhejna hai?\n\n(Note: Portal login password isme nahi jayega - login credentials kewal tab generate honge jab candidate company me aakar officially HRMS me Register hoga.)`, '✉️ Send Job Offer', 'btn btn-primary')) return;
   try {
     toast('Generating Offer Letter & Joining Form PDFs and dispatching email...', 'info');
     const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/send-offer`, {
@@ -1178,7 +1178,7 @@ ACT['cand-send-offer'] = async el => {
 ACT['cand-convert'] = async el => {
   const c = (S.candidates || []).find(x => x.id === el.dataset.id);
   if (!c) return;
-  if (!await confirmBox('Register Candidate as Company Employee?', `Candidate ${c.name} ne company join kar liya hai?\n\nHRMS Employee code generate hoga, Portal Login ID aur Temporary Password automatically banega aur candidate ke email (${c.email}) par direct welcome email send hoga.`)) return;
+  if (!await confirmBox('Register Candidate as Company Employee?', `Candidate ${c.name} ne company join kar liya hai?\n\nHRMS Employee code generate hoga, Portal Login ID aur Temporary Password automatically banega aur candidate ke email (${c.email}) par direct welcome email send hoga.`, '🚀 Register Employee', 'btn btn-primary')) return;
   try {
     toast('Registering employee and generating portal credentials...', 'info');
     const res = await fetch(`/api/candidates/${encodeURIComponent(c.id)}/convert-to-employee`, {
