@@ -1173,8 +1173,23 @@ V['hr-employees'] = D => {
 };
 
 function employeeForm(e) {
-  const selectedCands = (S.candidates || []).filter(c => c.status === 'Selected' || c.status === 'Offer Sent' || c.status === 'Offer Accepted');
-  const otherCands = (S.candidates || []).filter(c => !selectedCands.includes(c) && c.status !== 'Joined / Converted' && c.status !== 'Rejected');
+  // Exclude candidates who have already joined or are registered as company employees
+  const regEmails = new Set((S.employees || []).map(emp => (emp.email || '').toLowerCase().trim()).filter(Boolean));
+  const regPhones = new Set((S.employees || []).map(emp => (emp.phone || '').replace(/\D/g, '')).filter(Boolean));
+  const regCandIds = new Set((S.employees || []).map(emp => emp.candidateId).filter(Boolean));
+
+  const eligibleCands = (S.candidates || []).filter(c => {
+    if (c.status === 'Joined / Converted' || c.status === 'Rejected') return false;
+    if (c.convertedEmpId || c.convertedEmployeeId) return false;
+    if (regCandIds.has(c.id)) return false;
+    if (c.email && regEmails.has(c.email.toLowerCase().trim())) return false;
+    const cleanPh = (c.phone || '').replace(/\D/g, '');
+    if (cleanPh && cleanPh.length >= 10 && regPhones.has(cleanPh)) return false;
+    return true;
+  });
+
+  const selectedCands = eligibleCands.filter(c => c.status === 'Selected' || c.status === 'Offer Sent' || c.status === 'Offer Accepted');
+  const otherCands = eligibleCands.filter(c => !selectedCands.includes(c));
   const candOptions = [
     { value: '', label: '-- Direct Employee Registration (No Candidate) --' },
     ...selectedCands.map(c => ({ value: c.id, label: `★ [Selected] ${c.name} (${c.role || 'Staff'})` })),
@@ -1242,19 +1257,17 @@ function employeeForm(e) {
         toast('Employee details updated');
       } else {
         const newId = await dbAdd('employees', v);
-        // If linked to candidate, update candidate
-        if (v.candidateId) {
-          const cand = (S.candidates || []).find(c => c.id === v.candidateId);
-          if (cand) {
-            cand.status = 'Joined / Converted';
-            cand.convertedEmpId = newId;
-            cand.joinedAt = Date.now();
-            await dbUpdate('candidates', cand.id, {
-              status: 'Joined / Converted',
-              convertedEmpId: newId,
-              joinedAt: Date.now()
-            }).catch(() => {});
-          }
+        // If linked to candidate or matching candidate email, mark candidate as Joined / Converted
+        const cand = (S.candidates || []).find(c => (v.candidateId && c.id === v.candidateId) || (c.email && v.email && c.email.toLowerCase().trim() === v.email.toLowerCase().trim()));
+        if (cand) {
+          cand.status = 'Joined / Converted';
+          cand.convertedEmpId = newId;
+          cand.joinedAt = Date.now();
+          await dbUpdate('candidates', cand.id, {
+            status: 'Joined / Converted',
+            convertedEmpId: newId,
+            joinedAt: Date.now()
+          }).catch(() => {});
         }
 
         // Automatically generate portal login and credentials
@@ -1571,6 +1584,7 @@ function profileView(D, e) {
   const files = S.files.filter(f => f.employeeId === e.id && f.kind !== 'photo').sort((a, b) => b.uploadedAt - a.uploadedAt);
   const miss = missingRecords(e);
   const fact = (k, v) => `<div><dt>${esc(k)}</dt><dd>${v ? esc(v) : '<span class="muted">Not recorded</span>'}</dd></div>`;
+  const factHtml = (k, v) => `<div><dt>${esc(k)}</dt><dd>${v || '<span class="muted">Not recorded</span>'}</dd></div>`;
   const held = holdings().filter(i => i.takenById === e.id);
   const projects = S.projects.filter(p => p.status !== 'Completed' && (p.leadId === e.id || (p.memberIds || []).includes(e.id)));
 
@@ -1801,9 +1815,9 @@ function profileView(D, e) {
           <div style="background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;">
             <div style="font-size:12.5px;font-weight:800;color:var(--ink);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">👨‍👩‍👧 Family & Verification Contacts</div>
             <dl class="facts" style="margin:0;">
-              ${fact('Parents (Father / Mother)', [e.parentsName, e.parentsPhone ? `<a href="tel:${esc(e.parentsPhone)}">${esc(e.parentsPhone)}</a>` : ''].filter(Boolean).join(' · '))}
-              ${fact('Brother / Sister', [e.siblingName, e.siblingPhone ? `<a href="tel:${esc(e.siblingPhone)}">${esc(e.siblingPhone)}</a>` : ''].filter(Boolean).join(' · '))}
-              ${fact('Primary Emergency Contact', [e.emergencyName, e.emergencyPhone ? `<a href="tel:${esc(e.emergencyPhone)}">${esc(e.emergencyPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+              ${factHtml('Parents (Father / Mother)', [esc(e.parentsName), e.parentsPhone ? `<a href="tel:${esc(e.parentsPhone)}" style="color:#0284c7;font-weight:700">${esc(e.parentsPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+              ${factHtml('Brother / Sister', [esc(e.siblingName), e.siblingPhone ? `<a href="tel:${esc(e.siblingPhone)}" style="color:#0284c7;font-weight:700">${esc(e.siblingPhone)}</a>` : ''].filter(Boolean).join(' · '))}
+              ${factHtml('Primary Emergency Contact', [esc(e.emergencyName), e.emergencyPhone ? `<a href="tel:${esc(e.emergencyPhone)}" style="color:#0284c7;font-weight:700">${esc(e.emergencyPhone)}</a>` : ''].filter(Boolean).join(' · '))}
             </dl>
           </div>
 
@@ -1814,7 +1828,7 @@ function profileView(D, e) {
               ${fact('Living Status', e.livingStatus || 'Own House')}
               ${e.livingStatus === 'Rented Room / PG' ? `
                 ${fact('Room Owner / Landlord Name', e.roomOwnerName)}
-                ${fact('Landlord Phone Number', e.roomOwnerPhone ? `<a href="tel:${esc(e.roomOwnerPhone)}">${esc(e.roomOwnerPhone)}</a>` : '')}
+                ${factHtml('Landlord Phone Number', e.roomOwnerPhone ? `<a href="tel:${esc(e.roomOwnerPhone)}" style="color:#0284c7;font-weight:700">${esc(e.roomOwnerPhone)}</a>` : '')}
                 ${fact('Rented Room / PG Address', e.roomAddress)}
               ` : `
                 ${fact('Residential Status', 'Living in own family house (Permanent Address applies)')}
@@ -1899,11 +1913,20 @@ function profileView(D, e) {
 async function uploadFile(empId, kind, file) {
   if (!file) throw new UserError('Choose a file first.');
   if (file.size > 8 * 1024 * 1024) throw new UserError(`${file.name} is ${fileSize(file.size)}. The limit is 8 MB. Use a smaller photo or scan.`);
+  toast(`🔍 OCR Scanning & analyzing ${file.name}...`, 'info');
   const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, file, 'application/octet-stream');
-  if (res && res.extractedAddress) {
-    toast(`🪪 Permanent Address extracted from Aadhaar: "${res.extractedAddress}"!`, 'good');
-  } else if (/aadhaar|adhar/i.test(kind)) {
-    toast('Aadhaar card uploaded! Address recorded.', 'good');
+  if (res && res.extracted && res.extracted.address) {
+    toast(`🪪 Aadhaar OCR: Address extracted & saved!`, 'good');
+  } else if (res && res.extracted && res.extracted.aadhaarNumber) {
+    toast(`🪪 Aadhaar OCR: Number verified (${res.extracted.aadhaarNumber})!`, 'good');
+  } else if (res && res.extracted && res.extracted.panNumber) {
+    toast(`💳 PAN OCR: Number verified (${res.extracted.panNumber})!`, 'good');
+  } else if (res && res.extracted && res.extracted.roomOwnerName) {
+    toast(`🏠 Rent Agreement OCR: Landlord recorded (${res.extracted.roomOwnerName})!`, 'good');
+  } else if (res && res.extracted && res.extracted.highestCollege) {
+    toast(`🎓 Degree OCR: Education verified (${res.extracted.highestCollege})!`, 'good');
+  } else {
+    toast(`📄 ${res && res.kind ? res.kind : kind} uploaded & recorded!`, 'good');
   }
   await refresh();
 }
@@ -1984,8 +2007,9 @@ ACT['emp-kyc-edit'] = el => {
 ACT['kyc-sync-aadhaar'] = async el => {
   const empId = el.dataset.id;
   try {
+    toast('🔍 Running intelligent Aadhaar OCR address extraction...', 'info');
     const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/kyc/sync-aadhaar`);
-    toast(`Permanent Address synced from Aadhaar: "${res.address}"`, 'good');
+    toast(`🪪 Permanent Address synced from Aadhaar: "${res.address}"`, 'good');
     await refresh();
   } catch (err) {
     toast(err.message || 'Could not auto-extract address from Aadhaar.', 'warn');
