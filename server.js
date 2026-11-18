@@ -771,9 +771,15 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
   });
 });
 route('GET', '/api/files/:id', {}, async ({ req, res, user, params }) => {
-  const f = db().files.find(x => x.id === params.id);
-  const full = f && path.join(UPLOADS, f.stored);
-  if (!f || !/^f[0-9a-f]+\.(jpg|png|webp|pdf)$/.test(f.stored) || !fs.existsSync(full)) throw new HttpError(404, 'File not found.');
+  const f = db().files && db().files.find(x => x.id === params.id);
+  if (!f) throw new HttpError(404, 'File not found.');
+  const full = path.join(UPLOADS, f.stored);
+  if ((!fs.existsSync(full) || fs.statSync(full).size === 0) && f.dataBase64) {
+    try {
+      await fsp.writeFile(full, Buffer.from(f.dataBase64, 'base64'));
+    } catch (_) {}
+  }
+  if (!/^f[0-9a-f]+\.(jpg|png|webp|pdf)$/.test(f.stored) || !fs.existsSync(full)) throw new HttpError(404, 'File not found on disk.');
   if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && f.employeeId === user.empId)) {
     throw new HttpError(403, 'You are not allowed to view this file.');
   }
@@ -846,7 +852,10 @@ route('POST', '/api/employees/:id/kyc/sync-aadhaar', { mod: ['hrms'] }, async ({
     if (fs.existsSync(full)) {
       try { buf = await fsp.readFile(full); } catch (_) {}
     } else if (f.dataBase64) {
-      try { buf = Buffer.from(f.dataBase64, 'base64'); } catch (_) {}
+      try {
+        buf = Buffer.from(f.dataBase64, 'base64');
+        await fsp.writeFile(full, buf).catch(() => {});
+      } catch (_) {}
     }
     if (buf) {
       try {
@@ -880,18 +889,22 @@ route('POST', '/api/employees/:id/kyc/sync-aadhaar', { mod: ['hrms'] }, async ({
   send(res, 200, { ok: true, address: emp.permAddress, aadhaarNo: emp.aadhaarNumber, parentsName: emp.parentsName });
 });
 
-/* Re-scan and reclassify all existing documents of an employee */
+/* Re-scan, reclassify and deduplicate all existing documents of an employee */
 route('POST', '/api/employees/:id/kyc/reclassify-documents', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
   const emp = findDoc('employees', params.id);
   const empFiles = (db().files || []).filter(f => f.employeeId === emp.id && f.kind !== 'photo');
   let updatedCount = 0;
+
   for (const f of empFiles) {
     const full = path.join(UPLOADS, f.stored);
     let buf = null;
     if (fs.existsSync(full)) {
       try { buf = await fsp.readFile(full); } catch (_) {}
     } else if (f.dataBase64) {
-      try { buf = Buffer.from(f.dataBase64, 'base64'); } catch (_) {}
+      try {
+        buf = Buffer.from(f.dataBase64, 'base64');
+        await fsp.writeFile(full, buf).catch(() => {});
+      } catch (_) {}
     }
     if (buf) {
       const ocrRes = await docOcr.processDocumentOcr(buf, f.mime, f.kind, f.name, emp.name, emp.parentsName);
@@ -899,10 +912,64 @@ route('POST', '/api/employees/:id/kyc/reclassify-documents', { mod: ['hrms'] }, 
         f.kind = ocrRes.docType;
         updatedCount++;
       }
+      if (ocrRes && ocrRes.extracted) {
+        const ex = ocrRes.extracted;
+        if (f.kind === 'Aadhaar Card') {
+          if (ex.aadhaarNumber) {
+            emp.aadhaarNumber = ex.aadhaarNumber;
+            if (!emp.idNumber) { emp.idNumber = ex.aadhaarNumber; emp.idType = 'Aadhaar'; }
+          }
+          if (ex.address) {
+            emp.permAddress = ex.address;
+            if (!emp.address) emp.address = ex.address;
+          }
+          if (ex.parentsName && !emp.parentsName) emp.parentsName = ex.parentsName;
+          if (ex.dob && !emp.dob) emp.dob = ex.dob;
+        } else if (f.kind === 'PAN Card') {
+          if (ex.panNumber) {
+            emp.panNumber = ex.panNumber;
+            if (!emp.idNumber || emp.idType === 'PAN') { emp.idNumber = ex.panNumber; emp.idType = 'PAN'; }
+          }
+          if (ex.parentsName && !emp.parentsName) emp.parentsName = ex.parentsName;
+          if (ex.dob && !emp.dob) emp.dob = ex.dob;
+        } else if (f.kind === 'College Certificate') {
+          if (ex.highestCollege && !emp.highestCollege) emp.highestCollege = ex.highestCollege;
+        }
+      }
     }
   }
+
+  // Deduplicate files of same kind (e.g. keeping only the latest Aadhaar/PAN/College certificate)
+  const uniqueKinds = ['Aadhaar Card', 'PAN Card', 'College Certificate', 'Rent Agreement'];
+  for (const uk of uniqueKinds) {
+    const matching = (db().files || [])
+      .filter(f => f.employeeId === emp.id && f.kind === uk)
+      .sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+    if (matching.length > 1) {
+      // Keep matching[0], remove the rest
+      for (let i = 1; i < matching.length; i++) {
+        await removeFile(matching[i]).catch(() => {});
+      }
+    }
+  }
+
+  // Sanitize PAN vs Aadhaar numbers
+  if (emp.panNumber && /^\d{12}$/.test(emp.panNumber.replace(/\s+/g, ''))) {
+    if (!emp.aadhaarNumber) emp.aadhaarNumber = docOcr.cleanAadhaarNo(emp.panNumber);
+    emp.panNumber = '';
+  }
+
+  delete emp.sample;
   await store.save();
-  send(res, 200, { ok: true, updatedCount, message: `Re-scanned & corrected ${updatedCount} document(s)` });
+  send(res, 200, {
+    ok: true,
+    updatedCount,
+    address: emp.permAddress,
+    aadhaarNo: emp.aadhaarNumber,
+    panNo: emp.panNumber,
+    parentsName: emp.parentsName,
+    message: `Re-scanned & corrected ${updatedCount} document(s)`
+  });
 });
 
 /* ---- employee self-service and credentials ---- */

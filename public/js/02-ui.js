@@ -275,8 +275,11 @@ function confirmBox(title, body, ok, btnClass) {
   return new Promise(resolve => {
     let answer = false;
     dlg.className = 'dlg dlg-sm';
-    const cls = btnClass || (ok && !ok.toLowerCase().includes('delete') && !ok.toLowerCase().includes('reject') ? 'btn btn-primary' : 'btn btn-danger');
-    dlg.innerHTML = `<div class="form"><h2 class="dlg-title">${esc(title)}</h2><p class="dlg-body">${esc(body)}</p><div class="dlg-actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="button" class="${cls}" id="dlgOk">${esc(ok || 'Delete')}</button></div></div>`;
+    const isDestructive = (ok && (ok.toLowerCase().includes('delete') || ok.toLowerCase().includes('reject') || ok.toLowerCase().includes('remove'))) ||
+      (!ok && (/delete|remove|reject/i.test(title || '')));
+    const defaultLabel = isDestructive ? 'Delete' : 'Confirm';
+    const cls = btnClass || (isDestructive ? 'btn btn-danger' : 'btn btn-primary');
+    dlg.innerHTML = `<div class="form"><h2 class="dlg-title">${esc(title)}</h2><p class="dlg-body">${esc(body)}</p><div class="dlg-actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="button" class="${cls}" id="dlgOk">${esc(ok || defaultLabel)}</button></div></div>`;
     $('#dlgOk', dlg).addEventListener('click', () => { answer = true; closeDlg(); });
     dlg.addEventListener('close', () => resolve(answer), { once: true });
     dlg.showModal();
