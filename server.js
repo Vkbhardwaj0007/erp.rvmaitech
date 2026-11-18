@@ -1169,6 +1169,7 @@ route('POST', '/api/careers/apply', { open: true }, async ({ req, res }) => {
           mime,
           size: buf.length,
           stored,
+          dataBase64: buf.length <= 4 * 1024 * 1024 ? buf.toString('base64') : undefined,
           uploadedAt: Date.now()
         });
       }
@@ -1223,31 +1224,74 @@ route('POST', '/api/careers/apply', { open: true }, async ({ req, res }) => {
   send(res, 201, { ok: true, id: cand.id, message: 'Application submitted successfully! Our HR team will contact you.' });
 });
 
-/* Serve candidate resume file directly (inline view/download) */
+/* Serve candidate resume file directly (inline view/download) - fallback to dynamic Executive CV PDF */
 route('GET', '/api/candidates/:id/resume', { open: true }, async ({ req, res, params }) => {
   db().candidates = db().candidates || [];
   const cand = db().candidates.find(c => c.id === params.id);
   if (!cand) throw new HttpError(404, 'Candidate not found.');
 
-  // If candidate has an external resume URL (e.g. Google Drive), redirect
+  // If candidate has an external resume URL (e.g. Google Drive) and no uploaded file
   if (cand.resumeUrl && !cand.resumeId) {
     res.writeHead(302, { Location: cand.resumeUrl });
     return res.end();
   }
 
   const f = db().files && db().files.find(x => x.id === cand.resumeId);
-  if (!f) throw new HttpError(404, 'No resume document has been uploaded for this candidate yet.');
-  const full = path.join(UPLOADS, f.stored);
-  if (!fs.existsSync(full)) throw new HttpError(404, 'Resume file not found on disk.');
+  let fileBuf = null;
+  let mime = (f && f.mime) || 'application/pdf';
+  let filename = (f && f.name) || `${(cand.name || 'Candidate').replace(/\s+/g, '_')}_Resume.pdf`;
+
+  if (f && f.stored) {
+    const full = path.join(UPLOADS, f.stored);
+    if (fs.existsSync(full)) {
+      try { fileBuf = await fsp.readFile(full); } catch (_) {}
+    } else if (f.dataBase64) {
+      try {
+        fileBuf = Buffer.from(f.dataBase64, 'base64');
+        await fsp.writeFile(full, fileBuf).catch(() => {});
+      } catch (_) {}
+    }
+  }
+
+  // Fallback: If resume file not on disk or not uploaded, generate official Candidate CV PDF
+  if (!fileBuf) {
+    try {
+      fileBuf = await pdfGen.generateCandidateResumePdf(cand, db().company);
+      mime = 'application/pdf';
+      filename = `${(cand.name || 'Candidate').replace(/\s+/g, '_')}_Resume.pdf`;
+      const genId = f ? f.id : newId('f');
+      const stored = genId + '.pdf';
+      await fsp.writeFile(path.join(UPLOADS, stored), fileBuf).catch(() => {});
+      if (!cand.resumeId) {
+        cand.resumeId = genId;
+        cand.resumeName = filename;
+        db().files = db().files || [];
+        db().files.push({
+          id: genId,
+          kind: 'Resume',
+          name: filename,
+          mime: 'application/pdf',
+          size: fileBuf.length,
+          stored,
+          dataBase64: fileBuf.length <= 4 * 1024 * 1024 ? fileBuf.toString('base64') : undefined,
+          uploadedAt: Date.now()
+        });
+        await store.save().catch(() => {});
+      }
+    } catch (pdfErr) {
+      console.error('[resume] Failed to generate dynamic CV PDF:', pdfErr);
+      throw new HttpError(500, 'Unable to generate candidate resume document.');
+    }
+  }
 
   res.removeHeader('Content-Security-Policy');
   res.writeHead(200, {
-    'Content-Type': f.mime || 'application/pdf',
-    'Content-Length': fs.statSync(full).size,
+    'Content-Type': mime,
+    'Content-Length': fileBuf.length,
     'Cache-Control': 'private, max-age=600',
-    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.name || 'Resume.pdf')}`
+    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
   });
-  fs.createReadStream(full).pipe(res);
+  res.end(fileBuf);
 });
 
 /* Upload or replace candidate resume from HRMS */
@@ -1287,6 +1331,7 @@ route('POST', '/api/candidates/:id/resume', { mod: ['hrms'] }, async ({ req, res
     mime,
     size: buf.length,
     stored,
+    dataBase64: buf.length <= 4 * 1024 * 1024 ? buf.toString('base64') : undefined,
     uploadedAt: Date.now(),
     uploadedBy: user.id
   });

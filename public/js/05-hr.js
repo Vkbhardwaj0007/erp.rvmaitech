@@ -579,8 +579,8 @@ function showCredentialsModal(e, creds) {
 function showCandidateDossierModal(c) {
   if (!c) return;
   dlg.className = 'dlg dlg-wide';
-  const hasResume = !!(c.resumeId || c.resumeUrl);
-  const resumeDownloadUrl = c.resumeId ? `/api/candidates/${encodeURIComponent(c.id)}/resume` : (c.resumeUrl || '#');
+  const hasResume = true;
+  const resumeDownloadUrl = `/api/candidates/${encodeURIComponent(c.id)}/resume`;
 
   dlg.innerHTML = `
     <div class="form" style="max-width:880px">
@@ -657,22 +657,22 @@ function showCandidateDossierModal(c) {
       </div>` : ''}
 
       <!-- Section 5: Resume Document -->
-      <div style="background:var(--sheet);border:1.5px solid ${hasResume ? '#0284c7' : 'var(--rule)'};border-radius:10px;padding:16px 18px;margin-bottom:16px">
+      <div style="background:var(--sheet);border:1.5px solid #0284c7;border-radius:10px;padding:16px 18px;margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
-            <h3 style="margin:0 0 4px;font-size:13px;font-weight:800;color:${hasResume ? '#0284c7' : 'var(--ink)'};text-transform:uppercase;letter-spacing:.05em">
+            <h3 style="margin:0 0 4px;font-size:13px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:.05em">
               📄 5. Candidate Resume (PDF / DOC / DOCX)
             </h3>
             <div style="font-size:12.5px;color:var(--ink-2)">
-              ${hasResume 
+              ${c.resumeId 
                 ? `<span>Attached File: <b>${esc(c.resumeName || 'Resume.pdf')}</b></span>`
-                : `<span style="color:#f59e0b;font-weight:700">⚠️ No resume document uploaded yet.</span>`}
+                : `<span>Status: <b style="color:#0284c7">Auto-generated Executive CV PDF Dossier</b> (Ready to view & download)</span>`}
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            ${hasResume ? `<a href="${esc(resumeDownloadUrl)}" target="_blank" rel="noopener" class="btn" style="background:#0284c7;color:#fff;font-weight:700">📥 View / Download Resume</a>` : ''}
+            <a href="${esc(resumeDownloadUrl)}" target="_blank" rel="noopener" class="btn" style="background:#0284c7;color:#fff;font-weight:700">📥 View / Download Resume PDF</a>
             <label class="btn btn-outline" style="cursor:pointer;margin:0" title="Upload or replace candidate resume PDF/DOCX">
-              📤 ${hasResume ? 'Replace Resume' : 'Upload Resume'}
+              📤 ${c.resumeId ? 'Replace Resume' : 'Upload Custom File'}
               <input type="file" id="dossierResumeUpload" accept=".pdf,.doc,.docx,.png,.jpg" style="display:none">
             </label>
           </div>
@@ -762,9 +762,10 @@ function renderCandidatesTabHtml() {
         ${c.currentCtc ? `<div style="font-size:11px;color:var(--ink-2)">Cur: ${esc(c.currentCtc)}</div>` : ''}
       </td>
       <td>
-        ${(c.resumeId || c.resumeUrl)
-          ? `<a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" title="View Candidate Resume PDF" onclick="event.stopPropagation()">📄 View Resume</a>`
-          : `<label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0" title="Upload Resume" onclick="event.stopPropagation()">+ Upload<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>`}
+        <div style="display:flex;align-items:center;gap:4px">
+          <a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" title="View Candidate Resume / Executive CV PDF" onclick="event.stopPropagation()">📄 View Resume</a>
+          <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0;padding:2px 7px" title="Upload custom resume file" onclick="event.stopPropagation()">+<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>
+        </div>
       </td>
       <td>${c.interviewDate ? `<div style="font-weight:700">${fmtDate(c.interviewDate)}</div><div style="font-size:11px;color:#0284c7;font-weight:600">${esc(c.interviewTime || '11:00 AM')} · ${esc(c.interviewMode || 'Offline')}</div>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
       <td>${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</td>
