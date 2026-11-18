@@ -1691,6 +1691,7 @@ function profileView(D, e) {
             `)}
             ${W('hrms', `
               <button class="btn" data-action="emp-kyc-edit" data-id="${esc(e.id)}" style="font-weight:700;">✏️ Edit KYC Details</button>
+              <button class="btn btn-outline" data-action="emp-kyc-reclassify" data-id="${esc(e.id)}" title="Re-scan and auto-correct misclassified documents">🔍 Re-scan Documents</button>
             `)}
           </div>
         </div>
@@ -2011,6 +2012,17 @@ ACT['kyc-sync-aadhaar'] = async el => {
     await refresh();
   } catch (err) {
     toast(err.message || 'Could not auto-extract address from Aadhaar.', 'warn');
+  }
+};
+ACT['emp-kyc-reclassify'] = async el => {
+  const empId = el.dataset.id;
+  try {
+    toast('🔍 Running intelligent OCR re-scan on all uploaded documents...', 'info');
+    const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/kyc/reclassify-documents`);
+    toast(res.message || 'All documents re-scanned and classified!', 'good');
+    await refresh();
+  } catch (err) {
+    toast(err.message || 'Failed to re-scan documents', 'warn');
   }
 };
 CHG['kyc-quick-upload'] = el => {

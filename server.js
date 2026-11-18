@@ -646,21 +646,74 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
     emp.photoId = id;
   }
 
-  // --- Intelligent OCR & Document Classification ---
+  // --- Intelligent OCR & Strict KYC Document Validation ---
   let ocrResult = null;
   let extractedSummary = {};
   if (kind !== 'photo') {
     try {
-      ocrResult = await docOcr.processDocumentOcr(buf, type[0], kind, name);
-      if (ocrResult && ocrResult.success) {
-        // Auto-detect & refine document type if high confidence
-        if (ocrResult.confidence === 'high' && ocrResult.docType && ocrResult.docType !== 'Other') {
-          file.kind = ocrResult.docType;
-        }
-        const ex = ocrResult.extracted || {};
-        extractedSummary = ex;
+      ocrResult = await docOcr.processDocumentOcr(buf, type[0], kind, name, emp.name, emp.parentsName);
+    } catch (ocrErr) {
+      console.warn('[File Upload OCR Error]:', ocrErr);
+    }
 
-        // 1. Aadhaar Card Fields
+    if (ocrResult && ocrResult.success) {
+      const detected = ocrResult.docType;
+      const ex = ocrResult.extracted || {};
+      extractedSummary = ex;
+
+      // 1. STRICT SLOT VERIFICATION (Reject Mismatched Documents)
+      if (kind === 'Aadhaar Card' || /aadhaar|adhar/i.test(kind)) {
+        if (detected === 'College Certificate') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Marksheet / College Certificate hai, Aadhaar Card nahi! Kripya candidate ka asli Aadhaar Card upload karein.');
+        }
+        if (detected === 'Internal HR Document') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Company ka Joining / Appointment Letter hai, Aadhaar Card nahi! Kripya candidate ka asli Aadhaar Card upload karein.');
+        }
+        if (detected === 'PAN Card') {
+          throw new HttpError(400, '❌ Galat Slot: Yeh PAN Card hai! Kripya ise "Upload PAN" button par upload karein, Aadhaar slot me nahi.');
+        }
+        if (detected === 'Rent Agreement') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Rent Agreement hai, Aadhaar Card nahi!');
+        }
+        if (detected !== 'Aadhaar Card' && ocrResult.rawTextLength >= 50) {
+          throw new HttpError(400, '❌ Invalid Aadhaar: Upload kiye gaye document me Aadhaar Card ki jaankari (UIDAI / 12-digit UID) nahi mili. Kripya saaf Aadhaar Card upload karein.');
+        }
+      } else if (kind === 'PAN Card' || /pan/i.test(kind)) {
+        if (detected === 'Aadhaar Card') {
+          throw new HttpError(400, '❌ Galat Slot: Yeh Aadhaar Card hai! Kripya ise "Upload Aadhaar" button par upload karein.');
+        }
+        if (detected === 'College Certificate') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Marksheet / Diploma hai, PAN Card nahi!');
+        }
+        if (detected === 'Internal HR Document') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Joining / Appointment Letter hai, PAN Card nahi!');
+        }
+        if (detected !== 'PAN Card' && ocrResult.rawTextLength >= 50) {
+          throw new HttpError(400, '❌ Invalid PAN: Upload kiye gaye document me 10-digit PAN Card number nahi mila. Kripya saaf PAN Card upload karein.');
+        }
+      } else if (kind === 'College Certificate' || /college|degree|certificate/i.test(kind)) {
+        if (detected === 'Aadhaar Card' || detected === 'PAN Card') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Identity Proof (Aadhaar/PAN) hai! Kripya College Degree ya Marksheet upload karein.');
+        }
+        if (detected === 'Internal HR Document') {
+          throw new HttpError(400, '❌ Galat Document: Yeh Company Joining Letter hai, College Certificate nahi.');
+        }
+      }
+
+      // 2. CANDIDATE NAME VERIFICATION (Reject documents of different person)
+      if ((kind === 'Aadhaar Card' || kind === 'PAN Card') && ocrResult.rawTextLength >= 60) {
+        if (ocrResult.nameMatch && !ocrResult.nameMatch.matched) {
+          throw new HttpError(400, `❌ Name Mismatch: Document par naam candidate '${emp.name}' se match nahi kar raha hai! Yeh document kisi aur vyakti ka lag raha hai. Kripya candidate ka apna asli document upload karein.`);
+        }
+      }
+
+      // Auto-detect & refine document type if high confidence
+      if (ocrResult.confidence === 'high' && detected && detected !== 'Other') {
+        file.kind = detected;
+      }
+
+      // 3. APPLY EXTRACTED ENTITIES
+      if (file.kind === 'Aadhaar Card') {
         if (ex.aadhaarNumber) {
           emp.aadhaarNumber = ex.aadhaarNumber;
           if (!emp.idNumber) {
@@ -672,14 +725,9 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
           emp.permAddress = ex.address;
           if (!emp.address) emp.address = ex.address;
         }
-        if (ex.parentsName && !emp.parentsName) {
-          emp.parentsName = ex.parentsName;
-        }
-        if (ex.dob && !emp.dob) {
-          emp.dob = ex.dob;
-        }
-
-        // 2. PAN Card Fields
+        if (ex.parentsName && !emp.parentsName) emp.parentsName = ex.parentsName;
+        if (ex.dob && !emp.dob) emp.dob = ex.dob;
+      } else if (file.kind === 'PAN Card') {
         if (ex.panNumber) {
           emp.panNumber = ex.panNumber;
           if (!emp.idNumber || emp.idType === 'PAN') {
@@ -687,21 +735,24 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
             emp.idType = 'PAN';
           }
         }
-
-        // 3. Rent Agreement Fields
+      } else if (file.kind === 'Rent Agreement') {
         if (ex.livingStatus) emp.livingStatus = ex.livingStatus;
         if (ex.roomOwnerName && !emp.roomOwnerName) emp.roomOwnerName = ex.roomOwnerName;
         if (ex.roomOwnerPhone && !emp.roomOwnerPhone) emp.roomOwnerPhone = ex.roomOwnerPhone;
         if (ex.roomAddress && !emp.roomAddress) emp.roomAddress = ex.roomAddress;
-
-        // 4. College / Degree Certificate Fields
+      } else if (file.kind === 'College Certificate') {
         if (ex.highestCollege && !emp.highestCollege) emp.highestCollege = ex.highestCollege;
-
-        // 5. Relieving / Experience Fields
+      } else if (file.kind === 'Experience Letter') {
         if (ex.previousEmployer && !emp.previousEmployer) emp.previousEmployer = ex.previousEmployer;
       }
-    } catch (ocrErr) {
-      console.warn('[File Upload OCR Error]:', ocrErr);
+    }
+  }
+
+  // Clean replacement for unique statutory proofs (replace older file of same kind)
+  if (['Aadhaar Card', 'PAN Card', 'College Certificate', 'Rent Agreement'].includes(file.kind)) {
+    const prevFiles = (db().files || []).filter(f => f.employeeId === emp.id && f.kind === file.kind && f.id !== file.id);
+    for (const pf of prevFiles) {
+      await removeFile(pf).catch(() => {});
     }
   }
 
@@ -799,7 +850,7 @@ route('POST', '/api/employees/:id/kyc/sync-aadhaar', { mod: ['hrms'] }, async ({
     }
     if (buf) {
       try {
-        const ocrRes = await docOcr.processDocumentOcr(buf, f.mime, f.kind, f.name);
+        const ocrRes = await docOcr.processDocumentOcr(buf, f.mime, f.kind, f.name, emp.name, emp.parentsName);
         if (ocrRes && ocrRes.extracted && (ocrRes.extracted.address || ocrRes.extracted.aadhaarNumber)) {
           extracted = ocrRes.extracted;
           if (extracted.address) {
@@ -827,6 +878,31 @@ route('POST', '/api/employees/:id/kyc/sync-aadhaar', { mod: ['hrms'] }, async ({
   delete emp.sample;
   await store.save();
   send(res, 200, { ok: true, address: emp.permAddress, aadhaarNo: emp.aadhaarNumber, parentsName: emp.parentsName });
+});
+
+/* Re-scan and reclassify all existing documents of an employee */
+route('POST', '/api/employees/:id/kyc/reclassify-documents', { mod: ['hrms'] }, async ({ req, res, user, params }) => {
+  const emp = findDoc('employees', params.id);
+  const empFiles = (db().files || []).filter(f => f.employeeId === emp.id && f.kind !== 'photo');
+  let updatedCount = 0;
+  for (const f of empFiles) {
+    const full = path.join(UPLOADS, f.stored);
+    let buf = null;
+    if (fs.existsSync(full)) {
+      try { buf = await fsp.readFile(full); } catch (_) {}
+    } else if (f.dataBase64) {
+      try { buf = Buffer.from(f.dataBase64, 'base64'); } catch (_) {}
+    }
+    if (buf) {
+      const ocrRes = await docOcr.processDocumentOcr(buf, f.mime, f.kind, f.name, emp.name, emp.parentsName);
+      if (ocrRes && ocrRes.docType && ocrRes.docType !== 'Other') {
+        f.kind = ocrRes.docType;
+        updatedCount++;
+      }
+    }
+  }
+  await store.save();
+  send(res, 200, { ok: true, updatedCount, message: `Re-scanned & corrected ${updatedCount} document(s)` });
 });
 
 /* ---- employee self-service and credentials ---- */
