@@ -265,7 +265,8 @@ select.inline{padding:4px 8px;font-size:12.5px;font-weight:600;border-radius:6px
 }
 .tbl tfoot td{padding:12px 14px;font-weight:800;border-top:2px solid var(--rule);background:var(--paper)}
 .tbl .sub{display:block;color:var(--ink-2);font-size:12px;margin-top:2px}
-.tbl .acts{white-space:nowrap;text-align:right}
+.tbl .acts{text-align:right}
+.tbl .acts .vactions{justify-content:flex-end;flex-wrap:wrap}
 .tbl .nowrap{white-space:nowrap}
 .empty{background:var(--sheet);border:1px dashed var(--rule);border-radius:var(--radius-card);padding:40px 24px;text-align:center}
 .empty h3{font:700 18px/1.2 var(--font-display);color:var(--ink);margin-bottom:6px}

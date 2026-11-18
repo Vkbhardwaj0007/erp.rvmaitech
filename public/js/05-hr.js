@@ -744,43 +744,44 @@ function renderCandidatesTabHtml() {
 
   const rows = cands.map(c => `
     <tr style="cursor:pointer" onclick="if(!event.target.closest('button,a,input,label')){ACT['cand-view']({dataset:{id:'${esc(c.id)}'}})}">
-      <td>
-        <b style="font-size:13.5px;color:var(--ink)">${esc(c.name)}</b>
-        <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.email)} · ${esc(c.phone)}</div>
+      <td style="max-width:230px">
+        <b style="font-size:13.5px;color:var(--ink);display:block">${esc(c.name)}</b>
+        <div style="font-size:12px;font-weight:700;color:#0284c7;margin:2px 0">${esc(c.role || 'General Application')} <span style="font-size:11px;color:var(--ink-2);font-weight:400">(${esc(c.dept || 'Engineering')})</span></div>
+        <div style="font-size:11.5px;color:var(--ink-2)">${esc(c.email)} · ${esc(c.phone)}</div>
         ${c.address ? `<div style="font-size:11px;color:var(--ink-2);margin-top:1px">📍 ${esc(c.address)}</div>` : ''}
       </td>
-      <td>
-        <b style="font-size:13px;color:var(--ink)">${esc(c.role || 'General application')}</b>
-        <div style="font-size:11.5px;color:#0284c7;font-weight:600;margin-top:2px">${esc(c.qualification || c.dept || 'Engineering')}</div>
-      </td>
-      <td>
+      <td style="max-width:190px">
         <div><b>${esc(c.experience || 'Fresher')}</b></div>
-        <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${esc(c.currentCompany || c.source || 'Website')}</div>
+        <div style="font-size:11.5px;color:var(--ink-2);margin-top:2px">${esc(c.currentCompany || c.source || 'Website')}</div>
+        ${c.qualification ? `<div style="font-size:11px;color:#0284c7;font-weight:600;margin-top:2px">${esc(c.qualification)}</div>` : ''}
       </td>
-      <td>
-        <div style="font-size:12px;color:var(--ink)"><b>Exp:</b> <span style="color:#10b981">${esc(c.expectedCtc || inr(c.expectedSalary || 0))}</span></div>
-        ${c.currentCtc ? `<div style="font-size:11px;color:var(--ink-2)">Cur: ${esc(c.currentCtc)}</div>` : ''}
-      </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:4px">
-          <a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" title="View Candidate Resume / Executive CV PDF" onclick="event.stopPropagation()">📄 View Resume</a>
-          <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0;padding:2px 7px" title="Upload custom resume file" onclick="event.stopPropagation()">+<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>
+      <td style="max-width:160px">
+        <div style="font-size:12px;color:var(--ink)"><b>Exp:</b> <span style="color:#10b981;font-weight:700">${esc(c.expectedCtc || inr(c.expectedSalary || 0))}</span></div>
+        ${c.currentCtc ? `<div style="font-size:11px;color:var(--ink-2);margin-top:1px">Cur: ${esc(c.currentCtc)}</div>` : ''}
+        <div style="margin-top:5px;display:flex;align-items:center;gap:4px">
+          <a href="/api/candidates/${esc(c.id)}/resume" target="_blank" rel="noopener" class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700;padding:2px 8px;font-size:11.5px" title="View Candidate Resume / Executive CV PDF" onclick="event.stopPropagation()">📄 Resume</a>
+          <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0;padding:2px 6px;font-size:11px" title="Upload custom resume file" onclick="event.stopPropagation()">+<input type="file" style="display:none" data-upload-cand-resume="${esc(c.id)}"></label>
         </div>
       </td>
-      <td>${c.interviewDate ? `<div style="font-weight:700">${fmtDate(c.interviewDate)}</div><div style="font-size:11px;color:#0284c7;font-weight:600">${esc(c.interviewTime || '11:00 AM')} · ${esc(c.interviewMode || 'Offline')}</div>` : '<span style="color:var(--ink-2)">Not set</span>'}</td>
-      <td>${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</td>
-      <td class="acts" onclick="event.stopPropagation()">
-        <div class="vactions" style="justify-content:flex-end">
-          <button class="btn btn-sm" style="background:rgba(2,132,199,0.12);color:#0284c7;font-weight:700" data-action="cand-view" data-id="${esc(c.id)}" title="Open Full Candidate Application Dossier">👁️ View</button>
-          ${(c.interviewDate || c.status === 'Interview Scheduled') ? `<a class="btn btn-sm" style="background:#e0f2fe;color:#0284c7;font-weight:700" href="/api/candidates/${esc(c.id)}/interview-letter" target="_blank" rel="noopener" title="Open Interview Call Letter PDF">📄 Letter</a>` : ''}
+      <td style="max-width:190px">
+        <div style="margin-bottom:3px">${stamp(c.status || 'Applied', c.status === 'Joined / Converted' ? 'good' : (c.status === 'Selected' || c.status === 'Offer Sent') ? 'info' : c.status === 'Rejected' ? 'bad' : 'warn')}</div>
+        ${c.interviewDate ? `
+          <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-top:2px">📅 ${fmtDate(c.interviewDate)}</div>
+          <div style="font-size:11px;color:#0284c7;font-weight:600">${esc(c.interviewTime || '11:00 AM')} (${esc(c.interviewMode || 'Offline')})</div>
+          <a class="btn btn-sm" style="background:#e0f2fe;color:#0284c7;font-weight:700;padding:2px 7px;font-size:11px;margin-top:3px;display:inline-block" href="/api/candidates/${esc(c.id)}/interview-letter" target="_blank" rel="noopener" title="Open Interview Call Letter PDF" onclick="event.stopPropagation()">📄 Call Letter</a>
+        ` : '<span style="font-size:11.5px;color:var(--ink-2)">Interview not set</span>'}
+      </td>
+      <td class="acts" style="white-space:normal;min-width:140px" onclick="event.stopPropagation()">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;align-items:center">
+          <button class="btn btn-sm" style="background:rgba(2,132,199,0.12);color:#0284c7;font-weight:700;padding:3px 8px" data-action="cand-view" data-id="${esc(c.id)}" title="Open Full Candidate Application Dossier">👁️ View</button>
           ${(c.status === 'Selected' || c.status === 'Offer Sent')
-            ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700" data-action="cand-send-offer" data-id="${esc(c.id)}" title="Send Offer Letter & Joining Form to Candidate Email (No Password)">✉️ Send Job Offer</button>
-               <button class="btn btn-sm btn-primary" data-action="cand-convert" data-id="${esc(c.id)}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register Employee</button>`
+            ? `<button class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;padding:3px 8px" data-action="cand-send-offer" data-id="${esc(c.id)}" title="Send Offer Letter & Joining Form to Candidate Email">✉️ Offer</button>
+               <button class="btn btn-sm btn-primary" style="padding:3px 8px" data-action="cand-convert" data-id="${esc(c.id)}" title="Candidate Joined: Register in HRMS and Automatically Send Login ID & Password">🚀 Register</button>`
             : c.status === 'Joined / Converted'
-            ? `<span style="font-size:12px;font-weight:800;color:#16a34a;padding:4px 8px">✓ Onboarded</span>`
-            : `<button class="btn btn-sm btn-outline" data-action="cand-schedule" data-id="${esc(c.id)}">📅 ${c.interviewDate ? 'Reschedule' : 'Interview'}</button>
-               <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700" data-action="cand-select" data-id="${esc(c.id)}">✓ Select</button>`}
-          <button class="btn btn-sm btn-outline" data-action="cand-edit" data-id="${esc(c.id)}">Edit</button>
+            ? `<span style="font-size:12px;font-weight:800;color:#16a34a;padding:3px 6px">✓ Onboarded</span>`
+            : `<button class="btn btn-sm btn-outline" style="padding:3px 8px" data-action="cand-schedule" data-id="${esc(c.id)}">📅 ${c.interviewDate ? 'Reschedule' : 'Interview'}</button>
+               <button class="btn btn-sm" style="background:#0284c7;color:#fff;font-weight:700;padding:3px 8px" data-action="cand-select" data-id="${esc(c.id)}">✓ Select</button>`}
+          <button class="btn btn-sm btn-outline" style="padding:3px 8px" data-action="cand-edit" data-id="${esc(c.id)}" title="Edit Candidate">✏️</button>
         </div>
       </td>
     </tr>
@@ -788,13 +789,10 @@ function renderCandidatesTabHtml() {
 
   const cardsHtml = cands.length === 0 ? empty('No candidates recorded yet', 'Applicants who apply from the company website or walk in for interviews will appear here.', W('hrms', '<button class="btn btn-primary" data-action="cand-new">+ Add Candidate / Walk-in</button>')) :
     table([
-      'Candidate Name & Contact',
-      'Role & Qualification',
-      'Experience & Company',
-      'Salary (CTC)',
-      'Resume',
-      'Interview Date',
-      'Hiring Status',
+      'Candidate & Role',
+      'Experience & Education',
+      'CTC & Resume',
+      'Interview & Status',
       ''
     ], rows);
 
