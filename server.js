@@ -639,19 +639,13 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
     uploadedAt: Date.now(),
     uploadedBy: user.id
   };
-  await fsp.writeFile(path.join(UPLOADS, file.stored), buf);
-  if (kind === 'photo') {
-    const old = db().files.find(f => f.id === emp.photoId);
-    if (old) await removeFile(old);
-    emp.photoId = id;
-  }
 
-  // --- Intelligent OCR & Strict KYC Document Validation ---
+  // --- Intelligent OCR & Strict KYC Document Validation (runs BEFORE persisting to disk/DB) ---
   let ocrResult = null;
   let extractedSummary = {};
   if (kind !== 'photo') {
     try {
-      ocrResult = await docOcr.processDocumentOcr(buf, type[0], kind, name, emp.name, emp.parentsName);
+      ocrResult = await docOcr.processDocumentOcr(buf, type[0], kind, name, emp.name, emp.parentsName || emp.emergencyName || '');
     } catch (ocrErr) {
       console.warn('[File Upload OCR Error]:', ocrErr);
     }
@@ -661,7 +655,7 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
       const ex = ocrResult.extracted || {};
       extractedSummary = ex;
 
-      // 1. STRICT SLOT VERIFICATION (Reject Mismatched Documents)
+      // 1. STRICT SLOT VERIFICATION (Reject Mismatched Documents, Marksheets, Letters & Face Photos/Selfies)
       if (kind === 'Aadhaar Card' || /aadhaar|adhar/i.test(kind)) {
         if (detected === 'College Certificate') {
           throw new HttpError(400, '❌ Galat Document: Yeh Marksheet / College Certificate hai, Aadhaar Card nahi! Kripya candidate ka asli Aadhaar Card upload karein.');
@@ -675,7 +669,10 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
         if (detected === 'Rent Agreement') {
           throw new HttpError(400, '❌ Galat Document: Yeh Rent Agreement hai, Aadhaar Card nahi!');
         }
-        if (detected !== 'Aadhaar Card' && ocrResult.rawTextLength >= 50) {
+        if (detected !== 'Aadhaar Card') {
+          if (ocrResult.rawTextLength < 30) {
+            throw new HttpError(400, '❌ Galat Image (Face Photo / Unreadable): Yeh Aadhaar Card nahi lag raha hai — isme koi UIDAI text ya 12-digit Aadhaar number nahi mila. Kripya candidate ka saaf Aadhaar Card upload karein.');
+          }
           throw new HttpError(400, '❌ Invalid Aadhaar: Upload kiye gaye document me Aadhaar Card ki jaankari (UIDAI / 12-digit UID) nahi mili. Kripya saaf Aadhaar Card upload karein.');
         }
       } else if (kind === 'PAN Card' || /pan/i.test(kind)) {
@@ -688,7 +685,10 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
         if (detected === 'Internal HR Document') {
           throw new HttpError(400, '❌ Galat Document: Yeh Joining / Appointment Letter hai, PAN Card nahi!');
         }
-        if (detected !== 'PAN Card' && ocrResult.rawTextLength >= 50) {
+        if (detected !== 'PAN Card') {
+          if (ocrResult.rawTextLength < 30) {
+            throw new HttpError(400, '❌ Galat Image (Face Photo / Unreadable): Yeh PAN Card nahi lag raha hai — isme Income Tax / 10-digit PAN number nahi mila. Kripya candidate ka saaf PAN Card upload karein.');
+          }
           throw new HttpError(400, '❌ Invalid PAN: Upload kiye gaye document me 10-digit PAN Card number nahi mila. Kripya saaf PAN Card upload karein.');
         }
       } else if (kind === 'College Certificate' || /college|degree|certificate/i.test(kind)) {
@@ -698,13 +698,19 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
         if (detected === 'Internal HR Document') {
           throw new HttpError(400, '❌ Galat Document: Yeh Company Joining Letter hai, College Certificate nahi.');
         }
+        if (ocrResult.rawTextLength < 30) {
+          throw new HttpError(400, '❌ Galat Image (Face Photo / Blank): Yeh Marksheet ya College Certificate nahi lag raha hai. Kripya saaf certificate/marksheet upload karein.');
+        }
       }
 
-      // 2. CANDIDATE NAME VERIFICATION (Reject documents of different person)
-      if ((kind === 'Aadhaar Card' || kind === 'PAN Card') && ocrResult.rawTextLength >= 60) {
-        if (ocrResult.nameMatch && !ocrResult.nameMatch.matched) {
-          throw new HttpError(400, `❌ Name Mismatch: Document par naam candidate '${emp.name}' se match nahi kar raha hai! Yeh document kisi aur vyakti ka lag raha hai. Kripya candidate ka apna asli document upload karein.`);
-        }
+      // 2. CANDIDATE NAME VERIFICATION (Reject documents belonging to a different person)
+      const shouldVerifyName =
+        detected === 'Aadhaar Card' ||
+        detected === 'PAN Card' ||
+        (detected === 'College Certificate' && ocrResult.rawTextLength >= 80);
+
+      if (shouldVerifyName && ocrResult.nameMatch && !ocrResult.nameMatch.matched) {
+        throw new HttpError(400, `❌ Name Mismatch: Document par naam candidate '${emp.name}' se match nahi kar raha hai! Yeh document kisi aur vyakti ka lag raha hai. Kripya candidate ka apna asli document upload karein.`);
       }
 
       // Auto-detect & refine document type if high confidence
@@ -735,6 +741,8 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
             emp.idType = 'PAN';
           }
         }
+        if (ex.parentsName && !emp.parentsName) emp.parentsName = ex.parentsName;
+        if (ex.dob && !emp.dob) emp.dob = ex.dob;
       } else if (file.kind === 'Rent Agreement') {
         if (ex.livingStatus) emp.livingStatus = ex.livingStatus;
         if (ex.roomOwnerName && !emp.roomOwnerName) emp.roomOwnerName = ex.roomOwnerName;
@@ -745,7 +753,21 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
       } else if (file.kind === 'Experience Letter') {
         if (ex.previousEmployer && !emp.previousEmployer) emp.previousEmployer = ex.previousEmployer;
       }
+
+      // Sanitize if an Aadhaar 12-digit number was accidentally saved in panNumber earlier
+      if (emp.panNumber && /^\d{12}$/.test(String(emp.panNumber).replace(/\s+/g, ''))) {
+        if (!emp.aadhaarNumber) emp.aadhaarNumber = docOcr.cleanAadhaarNo(emp.panNumber);
+        emp.panNumber = '';
+      }
     }
+  }
+
+  // Validation passed — now write file to disk
+  await fsp.writeFile(path.join(UPLOADS, file.stored), buf);
+  if (kind === 'photo') {
+    const old = db().files.find(f => f.id === emp.photoId);
+    if (old) await removeFile(old);
+    emp.photoId = id;
   }
 
   // Clean replacement for unique statutory proofs (replace older file of same kind)
@@ -2245,11 +2267,11 @@ route('POST', '/api/crm/send-email', {}, async ({ req, res, user }) => {
 /* ================= Public Website Lead Ingestion API ================= */
 async function handlePublicWebsiteInquiry({ req, res }) {
   const b = await readJson(req);
-  const name = String(b.name || '').trim();
-  const phone = String(b.phone || '').trim();
+  const name = String(b.name || b.contactName || '').trim();
+  const phone = String(b.phone || b.whatsapp || '').trim();
   const email = String(b.email || '').trim();
-  const company = String(b.company || '').trim();
-  const service = String(b.service || b.subject || b.projectCategory || '').trim();
+  const company = String(b.company || b.organization || '').trim();
+  const service = String(b.service || b.auditScope || b.auditType || b.subject || b.projectCategory || '').trim();
   const message = String(b.message || b.requirements || b.details || '').trim();
   const budget = Number(b.budget) || Number(b.value) || 0;
   const timeline = String(b.timeline || '30–90 Days').trim();
@@ -2260,16 +2282,44 @@ async function handlePublicWebsiteInquiry({ req, res }) {
     throw new HttpError(400, 'Please provide at least a name, phone number, or email address.');
   }
 
+  // Helper to extract structured audit fields from formatted website description if not passed directly
+  const extractLine = (label) => {
+    const m = message.match(new RegExp(`-\\s*(?:${label})\\s*:\\s*([^\\r\\n]+)`, 'i'));
+    return m && m[1] ? m[1].trim() : '';
+  };
+
+  const auditScope = String(b.auditScope || b.auditType || extractLine('Audit\\s*Scope') || service.replace(/^\[COMPANY AUDIT\]\s*/i, '').split('—')[0] || '').trim().slice(0, 220);
+  const auditMode = String(b.auditMode || b.preferredMode || extractLine('Audit\\s*Mode') || '').trim().slice(0, 120);
+  const industry = String(b.industry || b.sector || extractLine('Industry') || '').trim().slice(0, 140);
+  const location = String(b.location || b.city || b.plantLocation || extractLine('Location\\s*\\/\\s*City|Location|City') || '').trim().slice(0, 180);
+  const machinesCount = String(b.machinesCount || b.machines || b.lines || extractLine('Facility\\s*Scale\\s*\\/\\s*Machines|Machines|Lines') || '').trim().slice(0, 60);
+  let preferredDate = String(b.preferredDate || b.auditDate || extractLine('Preferred\\s*Date') || '').trim();
+  const dmy = preferredDate.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+  if (dmy) preferredDate = `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(preferredDate)) preferredDate = '';
+  const challenges = String(b.challenges || b.goals || extractLine('Key\\s*Challenges\\s*\\/\\s*Goals|Challenges') || '').trim().slice(0, 1500);
+  const contactRole = String(b.contactRole || b.role || b.designation || '').trim().slice(0, 100);
+
   const leadDoc = {
     id: newId('l'),
     name: name || 'Website Visitor',
     company: company || (name ? `${name}` : 'Website Lead'),
+    contactRole,
     phone: phone,
     email: email,
-    source: source,
+    source: source.slice(0, 200),
     stage: 'New',
     value: budget,
-    note: `[Website Inquiry]\nService / Category: ${service || 'General Project Enquiry'}\nTimeline: ${timeline}\nDescription / Scope: ${message || 'No description provided.'}`,
+    auditScope,
+    auditMode,
+    industry,
+    location,
+    machinesCount,
+    preferredDate,
+    challenges,
+    timeline: timeline.slice(0, 80),
+    processChecks: JSON.stringify({ inquiry_logged: true }),
+    note: `[Website Inquiry]\nService / Category: ${service || 'General Project Enquiry'}\nTimeline: ${timeline}\nDescription / Scope: ${message || 'No description provided.'}`.slice(0, 2500),
     createdAt: Date.now(),
     createdBy: 'Website API'
   };
@@ -2289,7 +2339,14 @@ async function handlePublicWebsiteInquiry({ req, res }) {
       phone: leadDoc.phone,
       email: leadDoc.email,
       source: leadDoc.source,
-      stage: leadDoc.stage
+      stage: leadDoc.stage,
+      auditScope: leadDoc.auditScope,
+      auditMode: leadDoc.auditMode,
+      industry: leadDoc.industry,
+      location: leadDoc.location,
+      machinesCount: leadDoc.machinesCount,
+      preferredDate: leadDoc.preferredDate,
+      challenges: leadDoc.challenges
     }
   }, {
     'Access-Control-Allow-Origin': '*'

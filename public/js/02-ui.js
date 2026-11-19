@@ -377,7 +377,7 @@ function navGroups() {
 
   if (can('projects')) g.push({ label: 'PROJECTS', items: [['projects', 'All projects'], ['proj-history', 'Project history (Delivered)']] });
   if (can('erp')) g.push({ label: 'ERP', items: [['erp-home', 'ERP dashboard'], ['erp-inventory', 'Inventory'], ['erp-issues', 'Stock issue register'], ['erp-holdings', 'Who holds what'], ['erp-sales', 'Sales invoices'], ['erp-purchases', 'Purchases']] });
-  if (can('crm')) g.push({ label: 'CRM', items: [['crm-home', 'CRM dashboard'], ['crm-leads', 'Leads'], ['crm-pipeline', 'Pipeline'], ['crm-customers', 'Customers']] });
+  if (can('crm')) g.push({ label: 'CRM', items: [['crm-home', 'CRM dashboard'], ['crm-leads', 'Leads & Client Details'], ['crm-pipeline', '📊 Process Tracker'], ['crm-customers', 'Customers']] });
   if (can('hrms')) g.push({ label: 'HRMS', items: [['hr-home', 'HR dashboard'], ['hr-candidates', '🎯 Candidates & Hiring'], ['hr-salary-hub', 'Salary & Hours Dashboard'], ['hr-timesheet', 'Staff Timesheet & Tracking'], ['hr-employees', 'Employees & ID Cards'], ['hr-attendance', 'Attendance'], ['hr-leave', 'Leave'], ['hr-payroll', 'Payroll']] });
   if (can('finance')) g.push({ label: 'FINANCE', items: [['fin-home', 'Finance dashboard'], ['fin-receivables', 'Money to collect'], ['fin-expenses', 'Expenses'], ['fin-staff-costs', 'Staff daily costs']] });
   if (isOwner()) g.push({ label: 'ADMIN', items: [['admin-users', 'Logins and access']] });

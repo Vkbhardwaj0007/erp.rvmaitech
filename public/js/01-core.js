@@ -9,7 +9,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const isoOf = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 const today = () => isoOf(new Date());
-const parseISO = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+const parseISO = s => {
+  const str = String(s || '').trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = /^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})$/.exec(str);
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+};
 const fmtDate = s => { const d = parseISO(s); return d ? d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear() : '—'; };
 const fmtDay = s => { const d = parseISO(s); return d ? d.getDate() + ' ' + MON[d.getMonth()] : '—'; };
 const addDays = (s, n) => { const d = parseISO(s) || new Date(); d.setDate(d.getDate() + n); return isoOf(d); };
@@ -166,7 +172,9 @@ function projectLate(p) { return p.end && p.end < today() && p.status !== 'Compl
 function missingRecords(e) {
   const out = [];
   if (!e.photoId) out.push('photo');
-  if (!e.idType || !e.idNumber || !S.files.some(f => f.employeeId === e.id && f.kind === 'ID proof')) out.push('ID proof');
+  const hasIdFile = S.files.some(f => f.employeeId === e.id && /aadhaar|pan|id proof/i.test(f.kind || ''));
+  const hasIdNum = !!(e.aadhaarNumber || e.panNumber || e.idNumber);
+  if (!hasIdNum || !hasIdFile) out.push('ID proof');
   if (!e.address || !e.permAddress) out.push('address');
   return out;
 }

@@ -1691,7 +1691,9 @@ function profileView(D, e) {
             `)}
             ${W('hrms', `
               <button class="btn" data-action="emp-kyc-edit" data-id="${esc(e.id)}" style="font-weight:700;">✏️ Edit KYC Details</button>
-              <button class="btn btn-outline" data-action="emp-kyc-reclassify" data-id="${esc(e.id)}" title="Re-scan and auto-correct misclassified documents">🔍 Re-scan Documents</button>
+              ${getKycUploadState(e.id, '__rescan__')
+                ? `<button class="btn btn-outline" disabled style="opacity:0.75;cursor:wait"><span class="ocr-spinner ocr-spinner-sm"></span> Re-scanning OCR...</button>`
+                : `<button class="btn btn-outline" data-action="emp-kyc-reclassify" data-id="${esc(e.id)}" ${isAnyKycUploading(e.id) ? 'disabled style="opacity:0.55;cursor:not-allowed"' : ''} title="Re-scan and auto-correct misclassified documents">🔍 Re-scan Documents</button>`}
             `)}
           </div>
         </div>
@@ -1703,23 +1705,28 @@ function profileView(D, e) {
             <!-- Aadhaar Card with Auto-Extraction -->
             ${(() => {
               const aadhaarFile = files.find(f => /aadhaar|adhar/i.test(f.kind));
+              const upState = getKycUploadState(e.id, 'Aadhaar Card');
               return `
-              <div style="background:var(--paper);border:1.5px solid ${aadhaarFile ? '#86efac' : '#fdba74'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+              <div style="background:var(--paper);border:1.5px solid ${upState ? '#38bdf8' : aadhaarFile ? '#86efac' : '#fdba74'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;${upState ? 'box-shadow:0 0 0 2px rgba(56,189,248,0.18);' : ''}">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <span style="font-size:13px;font-weight:800;color:var(--ink);">🪪 Aadhaar Card</span>
-                    ${aadhaarFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-warn" style="font-size:10.5px;">Missing ⚠️</span>`}
+                    ${upState
+                      ? `<span class="stamp stamp-info" style="font-size:10.5px;">⏳ Scanning OCR...</span>`
+                      : aadhaarFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-warn" style="font-size:10.5px;">Missing ⚠️</span>`}
                   </div>
-                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">UID: <b>${esc(e.aadhaarNumber || 'Not recorded')}</b></div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">UID: <b>${esc(e.aadhaarNumber || (e.idType === 'Aadhaar' ? e.idNumber : '') || 'Not recorded')}</b></div>
                   <div style="font-size:11px;color:#0284c7;margin-top:4px;background:#f0f9ff;padding:5px 8px;border-radius:6px;border:1px dashed #bae6fd;">
                     <b>📍 Permanent Address (Aadhaar):</b><br>${esc(e.permAddress || 'Upload Aadhaar to auto-extract')}
                   </div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  ${aadhaarFile ? `<a class="btn btn-sm" href="/api/files/${esc(aadhaarFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
-                  <label class="btn btn-sm btn-primary" for="up-aadhaar-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${aadhaarFile ? 'Re-upload' : '📤 Upload Aadhaar'}</label>
-                  <input type="file" id="up-aadhaar-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Aadhaar Card" accept="application/pdf,image/*" hidden>
-                  ${aadhaarFile ? `<button class="btn btn-sm" data-action="kyc-sync-aadhaar" data-id="${esc(e.id)}" title="Re-sync address from uploaded Aadhaar">🔄</button>` : ''}
+                  ${upState
+                    ? renderOcrLoadingBox(upState)
+                    : `${aadhaarFile ? `<a class="btn btn-sm" href="/api/files/${esc(aadhaarFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                       <label class="btn btn-sm btn-primary" for="up-aadhaar-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${aadhaarFile ? 'Re-upload' : '📤 Upload Aadhaar'}</label>
+                       <input type="file" id="up-aadhaar-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Aadhaar Card" accept="application/pdf,image/*" hidden>
+                       ${aadhaarFile ? `<button class="btn btn-sm" data-action="kyc-sync-aadhaar" data-id="${esc(e.id)}" title="Re-sync address from uploaded Aadhaar">🔄</button>` : ''}`}
                 </div>
               </div>`;
             })()}
@@ -1727,20 +1734,27 @@ function profileView(D, e) {
             <!-- PAN Card -->
             ${(() => {
               const panFile = files.find(f => /pan/i.test(f.kind));
+              const upState = getKycUploadState(e.id, 'PAN Card');
+              const rawPan = e.panNumber || (e.idType === 'PAN' ? e.idNumber : '');
+              const validPan = rawPan && !/^\d{12}$/.test(String(rawPan).replace(/\s+/g, '')) ? rawPan : '';
               return `
-              <div style="background:var(--paper);border:1.5px solid ${panFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+              <div style="background:var(--paper);border:1.5px solid ${upState ? '#38bdf8' : panFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;${upState ? 'box-shadow:0 0 0 2px rgba(56,189,248,0.18);' : ''}">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <span style="font-size:13px;font-weight:800;color:var(--ink);">💳 PAN Card</span>
-                    ${panFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
+                    ${upState
+                      ? `<span class="stamp stamp-info" style="font-size:10.5px;">⏳ Scanning OCR...</span>`
+                      : panFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
                   </div>
-                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">PAN No: <b>${esc(e.panNumber || e.idNumber || 'Not recorded')}</b></div>
+                  <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">PAN No: <b>${esc(validPan || 'Not recorded')}</b></div>
                   <div style="font-size:11px;color:var(--ink-2);margin-top:4px;">Required for income tax TDS deduction & payroll compliance.</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  ${panFile ? `<a class="btn btn-sm" href="/api/files/${esc(panFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
-                  <label class="btn btn-sm btn-primary" for="up-pan-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${panFile ? 'Re-upload' : '📤 Upload PAN'}</label>
-                  <input type="file" id="up-pan-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="PAN Card" accept="application/pdf,image/*" hidden>
+                  ${upState
+                    ? renderOcrLoadingBox(upState)
+                    : `${panFile ? `<a class="btn btn-sm" href="/api/files/${esc(panFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                       <label class="btn btn-sm btn-primary" for="up-pan-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${panFile ? 'Re-upload' : '📤 Upload PAN'}</label>
+                       <input type="file" id="up-pan-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="PAN Card" accept="application/pdf,image/*" hidden>`}
                 </div>
               </div>`;
             })()}
@@ -1748,20 +1762,25 @@ function profileView(D, e) {
             <!-- College / Degree Certificate -->
             ${(() => {
               const collegeFile = files.find(f => /college|degree|certificate/i.test(f.kind));
+              const upState = getKycUploadState(e.id, 'College Certificate');
               return `
-              <div style="background:var(--paper);border:1.5px solid ${collegeFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+              <div style="background:var(--paper);border:1.5px solid ${upState ? '#38bdf8' : collegeFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;${upState ? 'box-shadow:0 0 0 2px rgba(56,189,248,0.18);' : ''}">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <span style="font-size:13px;font-weight:800;color:var(--ink);">🎓 College / Degree</span>
-                    ${collegeFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
+                    ${upState
+                      ? `<span class="stamp stamp-info" style="font-size:10.5px;">⏳ Scanning OCR...</span>`
+                      : collegeFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Pending</span>`}
                   </div>
                   <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Degree: <b>${esc(e.highestCollege || 'Not recorded')}</b></div>
                   <div style="font-size:11px;color:var(--ink-2);margin-top:4px;">Highest educational degree, marksheet, or technical diploma.</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  ${collegeFile ? `<a class="btn btn-sm" href="/api/files/${esc(collegeFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
-                  <label class="btn btn-sm btn-primary" for="up-col-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${collegeFile ? 'Re-upload' : '📤 Upload Certificate'}</label>
-                  <input type="file" id="up-col-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="College Certificate" accept="application/pdf,image/*" hidden>
+                  ${upState
+                    ? renderOcrLoadingBox(upState)
+                    : `${collegeFile ? `<a class="btn btn-sm" href="/api/files/${esc(collegeFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                       <label class="btn btn-sm btn-primary" for="up-col-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${collegeFile ? 'Re-upload' : '📤 Upload Certificate'}</label>
+                       <input type="file" id="up-col-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="College Certificate" accept="application/pdf,image/*" hidden>`}
                 </div>
               </div>`;
             })()}
@@ -1769,19 +1788,24 @@ function profileView(D, e) {
             <!-- Previous Relieving / Experience Letter -->
             ${(() => {
               const expFile = files.find(f => /experience|relieving/i.test(f.kind));
+              const upState = getKycUploadState(e.id, 'Experience Letter');
               return `
-              <div style="background:var(--paper);border:1.5px solid ${expFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+              <div style="background:var(--paper);border:1.5px solid ${upState ? '#38bdf8' : expFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;${upState ? 'box-shadow:0 0 0 2px rgba(56,189,248,0.18);' : ''}">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <span style="font-size:13px;font-weight:800;color:var(--ink);">📜 Experience / Relieving</span>
-                    ${expFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Fresher / NA</span>`}
+                    ${upState
+                      ? `<span class="stamp stamp-info" style="font-size:10.5px;">⏳ Scanning OCR...</span>`
+                      : expFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Fresher / NA</span>`}
                   </div>
                   <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Prior employer relieving letter & service certificate.</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  ${expFile ? `<a class="btn btn-sm" href="/api/files/${esc(expFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
-                  <label class="btn btn-sm" for="up-exp-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${expFile ? 'Re-upload' : '📤 Upload Relieving'}</label>
-                  <input type="file" id="up-exp-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Experience Letter" accept="application/pdf,image/*" hidden>
+                  ${upState
+                    ? renderOcrLoadingBox(upState)
+                    : `${expFile ? `<a class="btn btn-sm" href="/api/files/${esc(expFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                       <label class="btn btn-sm" for="up-exp-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${expFile ? 'Re-upload' : '📤 Upload Relieving'}</label>
+                       <input type="file" id="up-exp-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Experience Letter" accept="application/pdf,image/*" hidden>`}
                 </div>
               </div>`;
             })()}
@@ -1789,19 +1813,24 @@ function profileView(D, e) {
             <!-- Rent Agreement (if rented) -->
             ${(() => {
               const rentFile = files.find(f => /rent/i.test(f.kind));
+              const upState = getKycUploadState(e.id, 'Rent Agreement');
               return `
-              <div style="background:var(--paper);border:1.5px solid ${rentFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+              <div style="background:var(--paper);border:1.5px solid ${upState ? '#38bdf8' : rentFile ? '#86efac' : '#cbd5e1'};border-radius:8px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;${upState ? 'box-shadow:0 0 0 2px rgba(56,189,248,0.18);' : ''}">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <span style="font-size:13px;font-weight:800;color:var(--ink);">🏠 Rent Agreement</span>
-                    ${rentFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : (e.livingStatus === 'Rented Room / PG' ? `<span class="stamp stamp-warn" style="font-size:10.5px;">Pending ⚠️</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Own House</span>`)}
+                    ${upState
+                      ? `<span class="stamp stamp-info" style="font-size:10.5px;">⏳ Scanning OCR...</span>`
+                      : rentFile ? `<span class="stamp stamp-good" style="font-size:10.5px;">Uploaded ✓</span>` : (e.livingStatus === 'Rented Room / PG' ? `<span class="stamp stamp-warn" style="font-size:10.5px;">Pending ⚠️</span>` : `<span class="stamp stamp-mute" style="font-size:10.5px;">Own House</span>`)}
                   </div>
                   <div style="font-size:11.5px;color:var(--ink-2);margin-top:4px;">Status: <b>${esc(e.livingStatus || 'Own House')}</b></div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  ${rentFile ? `<a class="btn btn-sm" href="/api/files/${esc(rentFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
-                  <label class="btn btn-sm" for="up-rent-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${rentFile ? 'Re-upload' : '📤 Upload Agreement'}</label>
-                  <input type="file" id="up-rent-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Rent Agreement" accept="application/pdf,image/*" hidden>
+                  ${upState
+                    ? renderOcrLoadingBox(upState)
+                    : `${rentFile ? `<a class="btn btn-sm" href="/api/files/${esc(rentFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                       <label class="btn btn-sm" for="up-rent-${esc(e.id)}" style="cursor:pointer;flex:1;text-align:center;">${rentFile ? 'Re-upload' : '📤 Upload Agreement'}</label>
+                       <input type="file" id="up-rent-${esc(e.id)}" data-change="kyc-quick-upload" data-id="${esc(e.id)}" data-kind="Rent Agreement" accept="application/pdf,image/*" hidden>`}
                 </div>
               </div>`;
             })()}
@@ -1844,8 +1873,8 @@ function profileView(D, e) {
             ${fact('Bank Account Number', e.bankAccount)}
             ${fact('IFSC Code', e.bankIfsc)}
             ${fact('Account Holder Name', e.bankAccountHolder || e.name)}
-            ${fact('PAN Card Number', e.panNumber || e.idNumber)}
-            ${fact('Aadhaar Card Number', e.aadhaarNumber)}
+            ${fact('PAN Card Number', (e.panNumber && !/^\d{12}$/.test(String(e.panNumber).replace(/\s+/g, ''))) ? e.panNumber : (e.idType === 'PAN' ? e.idNumber : ''))}
+            ${fact('Aadhaar Card Number', e.aadhaarNumber || (e.idType === 'Aadhaar' ? e.idNumber : ''))}
             ${fact('UAN / PF Number', e.uanNumber)}
             ${fact('ESIC IP Number', e.esicNumber)}
           </dl>
@@ -1883,7 +1912,9 @@ function profileView(D, e) {
       <section class="card">
         <h2>Original Documents & Verification</h2>
         <p class="card-sub">${e.idType ? `${esc(e.idType)} number <b>${esc(e.idNumber || 'not recorded')}</b>` : 'ID proof type and number are not recorded yet.'} · Upload original scans of Aadhaar, PAN, Resume, Certificates in JPG, PNG, WEBP or PDF (up to 8 MB each).</p>
-        ${W('hrms', `
+        ${W('hrms', isAnyKycUploading(e.id)
+          ? `<div style="margin-bottom:12px">${renderOcrLoadingBox(getFirstKycUploadState(e.id))}</div>`
+          : `
           <div class="uploader">
             <select id="docKind" aria-label="Document type">${DOC_KINDS.map(k => `<option>${esc(k)}</option>`).join('')}</select>
             <input type="file" id="docPick" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Choose a file">
@@ -1909,31 +1940,78 @@ function profileView(D, e) {
     </div>`;
 }
 
+function kycUploadKey(empId, kind) { return `${empId}::${kind}`; }
+function getKycUploadState(empId, kind) {
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  return S.ui.uploadingDocs[kycUploadKey(empId, kind)] || null;
+}
+function isAnyKycUploading(empId) {
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  return Object.keys(S.ui.uploadingDocs).some(k => k.startsWith(empId + '::'));
+}
+function getFirstKycUploadState(empId) {
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  const k = Object.keys(S.ui.uploadingDocs).find(x => x.startsWith(empId + '::'));
+  return k ? S.ui.uploadingDocs[k] : { fileName: 'document' };
+}
+function renderOcrLoadingBox(upState) {
+  const label = (upState && upState.label) || 'Uploading & OCR Scanning...';
+  const sub = (upState && upState.fileName) ? `Verifying ${upState.fileName} — please wait` : 'Reading & verifying document — please wait';
+  return `
+    <div class="ocr-loading-box" role="status" aria-live="polite">
+      <span class="ocr-spinner" aria-hidden="true"></span>
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:800;font-size:12px;color:#38bdf8;line-height:1.25">${esc(label)}</div>
+        <div style="font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px" title="${esc(sub)}">${esc(sub)}</div>
+        <div class="ocr-progress-bar"><span></span></div>
+      </div>
+    </div>`;
+}
+
 async function uploadFile(empId, kind, file) {
   if (!file) throw new UserError('Choose a file first.');
   if (file.size > 8 * 1024 * 1024) throw new UserError(`${file.name} is ${fileSize(file.size)}. The limit is 8 MB. Use a smaller photo or scan.`);
-  toast(`🔍 OCR Scanning & analyzing ${file.name}...`, 'info');
-  const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, file, 'application/octet-stream');
-  if (res && res.extracted && res.extracted.address) {
-    toast(`🪪 Aadhaar OCR: Address extracted & saved!`, 'good');
-  } else if (res && res.extracted && res.extracted.aadhaarNumber) {
-    toast(`🪪 Aadhaar OCR: Number verified (${res.extracted.aadhaarNumber})!`, 'good');
-  } else if (res && res.extracted && res.extracted.panNumber) {
-    toast(`💳 PAN OCR: Number verified (${res.extracted.panNumber})!`, 'good');
-  } else if (res && res.extracted && res.extracted.roomOwnerName) {
-    toast(`🏠 Rent Agreement OCR: Landlord recorded (${res.extracted.roomOwnerName})!`, 'good');
-  } else if (res && res.extracted && res.extracted.highestCollege) {
-    toast(`🎓 Degree OCR: Education verified (${res.extracted.highestCollege})!`, 'good');
-  } else {
-    toast(`📄 ${res && res.kind ? res.kind : kind} uploaded & recorded!`, 'good');
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  const key = kycUploadKey(empId, kind);
+  if (S.ui.uploadingDocs[key]) {
+    toast(`⏳ ${kind} upload & OCR scan already running. Please wait...`, 'info');
+    return;
   }
-  await refresh();
+  S.ui.uploadingDocs[key] = {
+    fileName: file.name,
+    label: kind === 'photo' ? 'Uploading Photo...' : `Uploading & OCR Scanning ${kind}...`,
+    startedAt: Date.now()
+  };
+  render(); // Immediately show loading indicator and remove Upload option until done
+  try {
+    toast(`⏳ Uploading & OCR scanning ${file.name}... Please wait`, 'info');
+    const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, file, 'application/octet-stream');
+    if (res && res.extracted && res.extracted.address) {
+      toast(`🪪 Aadhaar Verified! UID & Permanent Address auto-filled!`, 'good');
+    } else if (res && res.extracted && res.extracted.aadhaarNumber) {
+      toast(`🪪 Aadhaar OCR: Number verified (${res.extracted.aadhaarNumber})!`, 'good');
+    } else if (res && res.extracted && res.extracted.panNumber) {
+      toast(`💳 PAN OCR: Number verified (${res.extracted.panNumber})!`, 'good');
+    } else if (res && res.extracted && res.extracted.roomOwnerName) {
+      toast(`🏠 Rent Agreement OCR: Landlord recorded (${res.extracted.roomOwnerName})!`, 'good');
+    } else if (res && res.extracted && res.extracted.highestCollege) {
+      toast(`🎓 Degree OCR: Education verified (${res.extracted.highestCollege})!`, 'good');
+    } else {
+      toast(`📄 ${res && res.kind ? res.kind : kind} uploaded & recorded!`, 'good');
+    }
+    await loadData();
+  } finally {
+    delete S.ui.uploadingDocs[key];
+    render(); // Unlock card & show updated status (or restore Upload button on error)
+  }
 }
-CHG['photo-pick'] = el => { const f = el.files[0]; if (f) save(() => uploadFile(el.dataset.id, 'photo', f), 'Photo saved'); };
+CHG['photo-pick'] = el => { const f = el.files[0]; el.value = ''; if (f) save(() => uploadFile(el.dataset.id, 'photo', f)); };
 ACT['doc-upload'] = el => {
   const pick = $('#docPick'), kind = $('#docKind').value;
+  const f = pick && pick.files[0];
+  if (pick) pick.value = '';
   el.disabled = true;
-  save(() => uploadFile(el.dataset.id, kind, pick.files[0]), `${kind} uploaded`).then(() => { el.disabled = false; });
+  save(() => uploadFile(el.dataset.id, kind, f)).then(() => { el.disabled = false; });
 };
 ACT['doc-del'] = async el => {
   const f = S.files.find(x => x.id === el.dataset.id); if (!f) return;
@@ -1941,6 +2019,8 @@ ACT['doc-del'] = async el => {
 };
 
 function openKycEditModal(e) {
+  const validPan = (e.panNumber && !/^\d{12}$/.test(String(e.panNumber).replace(/\s+/g, ''))) ? e.panNumber : (e.idType === 'PAN' ? e.idNumber : '');
+  const validAadhaar = e.aadhaarNumber || (e.idType === 'Aadhaar' ? e.idNumber : '');
   openForm({
     title: `Edit KYC & Statutory Verification — ${e.name} (${e.code})`,
     wide: true,
@@ -1948,8 +2028,8 @@ function openKycEditModal(e) {
     fields: [
       { type: 'heading', label: '🎓 1. Educational & Statutory Identifiers' },
       { name: 'highestCollege', label: 'Highest College / Degree / Certificate', full: true, value: e.highestCollege || '' },
-      { name: 'aadhaarNumber', label: 'Aadhaar Card Number (12 Digits)', value: e.aadhaarNumber || '' },
-      { name: 'panNumber', label: 'PAN Card Number', value: e.panNumber || e.idNumber || '' },
+      { name: 'aadhaarNumber', label: 'Aadhaar Card Number (12 Digits)', value: validAadhaar || '' },
+      { name: 'panNumber', label: 'PAN Card Number', value: validPan || '' },
       { name: 'uanNumber', label: 'UAN / PF Number', value: e.uanNumber || '' },
       { name: 'esicNumber', label: 'ESIC IP Number', value: e.esicNumber || '' },
 
@@ -2005,31 +2085,48 @@ ACT['emp-kyc-edit'] = el => {
 };
 ACT['kyc-sync-aadhaar'] = async el => {
   const empId = el.dataset.id;
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  const key = kycUploadKey(empId, 'Aadhaar Card');
+  if (S.ui.uploadingDocs[key]) return;
+  S.ui.uploadingDocs[key] = { fileName: 'Aadhaar Card', label: 'Syncing Address via OCR...', startedAt: Date.now() };
+  render();
   try {
     toast('🔍 Running intelligent Aadhaar OCR address extraction...', 'info');
     const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/kyc/sync-aadhaar`);
     toast(`🪪 Permanent Address synced from Aadhaar: "${res.address}"`, 'good');
-    await refresh();
+    await loadData();
   } catch (err) {
     toast(err.message || 'Could not auto-extract address from Aadhaar.', 'warn');
+  } finally {
+    delete S.ui.uploadingDocs[key];
+    render();
   }
 };
 ACT['emp-kyc-reclassify'] = async el => {
   const empId = el.dataset.id;
+  S.ui.uploadingDocs = S.ui.uploadingDocs || {};
+  const key = kycUploadKey(empId, '__rescan__');
+  if (S.ui.uploadingDocs[key]) return;
+  S.ui.uploadingDocs[key] = { fileName: 'all documents', label: 'Re-scanning Documents via OCR...', startedAt: Date.now() };
+  render();
   try {
     toast('🔍 Running intelligent OCR re-scan on all uploaded documents...', 'info');
     const res = await api('POST', `/api/employees/${encodeURIComponent(empId)}/kyc/reclassify-documents`);
     toast(res.message || 'All documents re-scanned and classified!', 'good');
-    await refresh();
+    await loadData();
   } catch (err) {
     toast(err.message || 'Failed to re-scan documents', 'warn');
+  } finally {
+    delete S.ui.uploadingDocs[key];
+    render();
   }
 };
 CHG['kyc-quick-upload'] = el => {
   const f = el.files[0];
   const empId = el.dataset.id;
   const kind = el.dataset.kind || 'Other';
-  if (f) save(() => uploadFile(empId, kind, f), `${kind} uploaded`);
+  el.value = '';
+  if (f) save(() => uploadFile(empId, kind, f));
 };
 
 /* ================= HRMS: Daily Work Reports ================= */
