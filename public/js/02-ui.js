@@ -414,8 +414,8 @@ function renderNav(D) {
   }).join('')}</div>`).join('');
   $('#companyName').textContent = S.company.name || 'Your company';
   const u = S.user;
-  $('#brandSub').textContent = isOwner() ? 'Owner view' : isEmployee() ? 'Employee Self-Service' : (u.modules || []).map(m => MODULE_NAMES[m]).join(' · ');
-  $('#sideFoot').innerHTML = `<div class="who"><b>${esc(u.name)}</b><span>${isOwner() ? 'Owner, sees everything' : isEmployee() ? 'Employee portal · ' + esc(u.loginId) : 'Login: ' + esc(u.loginId)}</span></div><div class="who-acts"><button class="link-btn" data-action="my-password">Change password</button><button class="link-btn" data-action="logout">Log out</button></div>`;
+  $('#brandSub').textContent = isOwner() ? (u.title ? `${u.title} view` : 'Owner view') : isEmployee() ? 'Employee Self-Service' : (u.modules || []).map(m => MODULE_NAMES[m]).join(' · ');
+  $('#sideFoot').innerHTML = `<div class="who"><b>${esc(u.name)}</b><span>${isOwner() ? (u.title ? `${esc(u.title)}, sees everything` : 'Owner, sees everything') : isEmployee() ? 'Employee portal · ' + esc(u.loginId) : 'Login: ' + esc(u.loginId)}</span></div><div class="who-acts"><button class="link-btn" data-action="my-password">Change password</button><button class="link-btn" data-action="logout">Log out</button></div>`;
 }
 function renderBanner() {
   const el = $('#banner');

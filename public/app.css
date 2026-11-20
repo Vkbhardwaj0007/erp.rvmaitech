@@ -1738,3 +1738,11 @@ select.form-control {
   padding-top: 10px;
   border-top: 1px solid var(--rule);
 }
+
+
+/* ================= Mandatory KYC Policy Gate ================= */
+.auth-card.kyc-gate-card {
+  max-width: 780px;
+  width: 100%;
+  padding: 24px 26px;
+}

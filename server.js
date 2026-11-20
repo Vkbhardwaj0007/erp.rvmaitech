@@ -302,11 +302,17 @@ const isHttps = req => !!req.socket.encrypted || req.headers['x-forwarded-proto'
 const publicUser = u => ({
   id: u.id,
   name: u.name,
+  title: u.title || '',
+  email: u.email || '',
   loginId: u.loginId,
   role: u.role,
   empId: u.empId || null,
   modules: u.role === 'owner' ? MODULES.slice() : (u.role === 'employee' ? ['employee'] : u.modules),
   active: u.active !== false,
+  requireKyc: !!u.requireKyc,
+  kycCompleted: !!u.kycCompleted,
+  kycGateActive: !!(u.requireKyc && !u.kycCompleted),
+  kycAcceptedAt: u.kycAcceptedAt || 0,
   lastLogin: u.lastLogin || 0
 });
 function checkPassword(pw) { if (typeof pw !== 'string' || pw.length < 8 || pw.length > 200) throw new HttpError(400, 'A password needs at least 8 characters.'); }
@@ -387,7 +393,7 @@ route('POST', '/api/logout', { open: true }, async ({ req, res }) => {
   send(res, 200, { ok: true }, { 'Set-Cookie': sessions.clearCookie() });
 });
 
-route('POST', '/api/password', {}, async ({ req, res, user }) => {
+route('POST', '/api/password', { allowDuringKyc: true }, async ({ req, res, user }) => {
   const b = await readJson(req);
   if (!await verifyPassword(String(b.current || ''), user.passHash)) throw new HttpError(403, 'Your current password is not right.');
   checkPassword(b.next);
@@ -396,10 +402,60 @@ route('POST', '/api/password', {}, async ({ req, res, user }) => {
   send(res, 200, { ok: true });
 });
 
+/* Complete Mandatory KYC Policy Gate (verifies server-side that authentic Aadhaar & PAN were uploaded via OCR) */
+route('POST', '/api/auth/complete-kyc-policy', { allowDuringKyc: true }, async ({ req, res, user }) => {
+  const b = await readJson(req);
+  if (!b.acceptedPolicy) {
+    throw new HttpError(400, 'Please accept the Mandatory Identity & Governance Policy checkbox to continue.');
+  }
+  const emp = (db().employees || []).find(e => e.id === user.empId);
+  if (!emp) throw new HttpError(404, 'Your KYC onboarding profile was not found. Contact administrator.');
+
+  const myFiles = (db().files || []).filter(f => f.employeeId === emp.id);
+  const hasAadhaar = myFiles.some(f => /aadhaar|adhar/i.test(f.kind || ''));
+  const hasPan = myFiles.some(f => /pan/i.test(f.kind || ''));
+  if (!hasAadhaar) {
+    throw new HttpError(400, '❌ Aadhaar Card Missing: Portal access unlock karne se pehle apna asli Aadhaar Card upload karke OCR verify karein.');
+  }
+  if (!hasPan) {
+    throw new HttpError(400, '❌ PAN Card Missing: Portal access unlock karne se pehle apna asli PAN Card upload karke OCR verify karein.');
+  }
+
+  user.kycCompleted = true;
+  user.requireKyc = false;
+  user.kycAcceptedAt = Date.now();
+  emp.kycStatus = 'Verified & Cleared';
+  emp.kycVerifiedAt = today();
+  emp.kycVerifiedBy = 'Mandatory KYC OCR Policy';
+  delete emp.sample;
+  await store.save();
+  send(res, 200, {
+    ok: true,
+    unlocked: true,
+    user: publicUser(user),
+    message: '🎉 KYC Verification Complete! Full Portal Access Unlocked.'
+  });
+});
+
 /* Everything this user may see, in one call. */
 function sampleCount() { return DATA_COLS.reduce((a, c) => a + db()[c].filter(x => x.sample).length, 0) + db().sampleAttendance.length; }
-route('GET', '/api/data', {}, async ({ res, user }) => {
+route('GET', '/api/data', { allowDuringKyc: true }, async ({ res, user }) => {
   const d = db(), data = {};
+  // Strict Mandatory KYC Policy Gate: return ONLY the user's own KYC profile & files until verified
+  if (user.requireKyc && !user.kycCompleted) {
+    const ownEmp = (d.employees || []).find(e => e.id === user.empId);
+    const ownFiles = (d.files || [])
+      .filter(f => f.employeeId === user.empId)
+      .map(f => ({ id: f.id, employeeId: f.employeeId, kind: f.kind, name: f.name, mime: f.mime, size: f.size, uploadedAt: f.uploadedAt }));
+    return send(res, 200, {
+      user: publicUser(user),
+      company: { name: (d.company && d.company.name) || 'RvmAiTech' },
+      kycGateRequired: true,
+      data: { employees: ownEmp ? [ownEmp] : [], files: ownFiles },
+      sampleCount: 0,
+      today: today()
+    });
+  }
   for (const col of DATA_COLS) {
     const spec = COLLECTIONS[col], view = viewFor(user, spec);
     if (view) data[col] = d[col].map(x => shape(spec, view, x));
@@ -422,7 +478,7 @@ route('GET', '/api/data', {}, async ({ res, user }) => {
     if (hasModule(user, 'hrms') || isOwner(user)) data.emailOutbox = d.emailOutbox || [];
     if (isOwner(user)) data.users = d.users.map(publicUser);
   }
-  send(res, 200, { user: publicUser(user), company: d.company, data, sampleCount: isOwner(user) ? sampleCount() : 0, today: today(), mongoStatus: mongo.getMongoStatus() });
+  send(res, 200, { user: publicUser(user), company: d.company, kycGateRequired: false, data, sampleCount: isOwner(user) ? sampleCount() : 0, today: today(), mongoStatus: mongo.getMongoStatus() });
 });
 
 /* MongoDB Cloud Sync endpoints */
@@ -613,8 +669,12 @@ function extractAadhaarDetails(buf, mime) {
   return { aadhaarNo, address };
 }
 
-route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, query }) => {
-  if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && user.empId === params.id)) {
+route('POST', '/api/employees/:id/files', { allowDuringKyc: true }, async ({ req, res, user, params, query }) => {
+  if (user.requireKyc && !user.kycCompleted) {
+    if (!user.empId || params.id !== user.empId) {
+      throw new HttpError(403, '🔒 Mandatory KYC Policy: Aap sirf apne khud ke KYC documents upload kar sakte hain.');
+    }
+  } else if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && user.empId === params.id)) {
     throw new HttpError(403, 'You are not allowed to upload files for this employee.');
   }
   const emp = findDoc('employees', params.id);
@@ -792,9 +852,14 @@ route('POST', '/api/employees/:id/files', {}, async ({ req, res, user, params, q
     highestCollege: emp.highestCollege
   });
 });
-route('GET', '/api/files/:id', {}, async ({ req, res, user, params }) => {
+route('GET', '/api/files/:id', { allowDuringKyc: true }, async ({ req, res, user, params }) => {
   const f = db().files && db().files.find(x => x.id === params.id);
   if (!f) throw new HttpError(404, 'File not found.');
+  if (user.requireKyc && !user.kycCompleted) {
+    if (!user.empId || f.employeeId !== user.empId) throw new HttpError(403, '🔒 Mandatory KYC Policy: Only your own uploaded documents can be viewed before KYC completion.');
+  } else if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && f.employeeId === user.empId)) {
+    throw new HttpError(403, 'You are not allowed to view this file.');
+  }
   const full = path.join(UPLOADS, f.stored);
   if ((!fs.existsSync(full) || fs.statSync(full).size === 0) && f.dataBase64) {
     try {
@@ -802,17 +867,16 @@ route('GET', '/api/files/:id', {}, async ({ req, res, user, params }) => {
     } catch (_) {}
   }
   if (!/^f[0-9a-f]+\.(jpg|png|webp|pdf)$/.test(f.stored) || !fs.existsSync(full)) throw new HttpError(404, 'File not found on disk.');
-  if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && f.employeeId === user.empId)) {
-    throw new HttpError(403, 'You are not allowed to view this file.');
-  }
   res.removeHeader('Content-Security-Policy');
   res.writeHead(200, { 'Content-Type': f.mime, 'Content-Length': fs.statSync(full).size, 'Cache-Control': 'private, max-age=600', 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.name)}` });
   fs.createReadStream(full).pipe(res);
 });
-route('DELETE', '/api/files/:id', {}, async ({ res, user, params }) => {
+route('DELETE', '/api/files/:id', { allowDuringKyc: true }, async ({ res, user, params }) => {
   const f = db().files.find(x => x.id === params.id);
   if (!f) throw new HttpError(404, 'File not found.');
-  if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && f.employeeId === user.empId)) {
+  if (user.requireKyc && !user.kycCompleted) {
+    if (!user.empId || f.employeeId !== user.empId) throw new HttpError(403, '🔒 Mandatory KYC Policy: Only your own uploaded documents can be modified before KYC completion.');
+  } else if (!isOwner(user) && !hasModule(user, 'hrms') && !(user.role === 'employee' && f.employeeId === user.empId)) {
     throw new HttpError(403, 'You are not allowed to delete this file.');
   }
   const emp = db().employees.find(e => e.id === f.employeeId);
@@ -2941,6 +3005,10 @@ async function handle(req, res) {
       const uid = sessions.userId(req);
       const user = uid && db().users.find(u => u.id === uid && u.active !== false);
       if (!user) throw new HttpError(401, 'Log in to continue.');
+      // Mandatory KYC Policy Gate: block all ERP/CRM/HRMS/Finance/Projects routes until original Aadhaar & PAN are OCR verified
+      if (user.requireKyc && !user.kycCompleted && !hit.opts.allowDuringKyc) {
+        throw new HttpError(403, '🔒 Mandatory KYC Policy: Portal access unlock karne ke liye pehle apna asli Aadhaar Card aur PAN Card upload karke verify karein.');
+      }
       if (hit.opts.owner && !isOwner(user)) throw new HttpError(403, 'Only the owner can do this.');
       if (hit.opts.mod && !hit.opts.mod.some(m => hasModule(user, m))) throw new HttpError(403, 'Your login is not allowed to open this.');
       ctx.user = user;

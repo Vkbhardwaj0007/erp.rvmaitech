@@ -255,11 +255,21 @@ V.overview = D => {
 /* ================= Owner: logins and access ================= */
 const moduleChecks = () => Object.keys(MODULE_NAMES).map(m => ({ value: m, label: MODULE_NAMES[m] }));
 V['admin-users'] = () => {
-  const body = S.users.slice().sort((a, b) => (a.role === 'owner' ? 0 : 1) - (b.role === 'owner' ? 0 : 1) || byName(a, b)).map(u => `<tr><td><b>${esc(u.name)}</b>${u.id === S.user.id ? '<span class="sub">This is you</span>' : ''}</td><td class="mono">${esc(u.loginId)}</td><td>${u.role === 'owner' ? stamp('Owner: everything', 'good') : u.modules.map(m => stamp(MODULE_NAMES[m], 'info')).join(' ')}</td><td>${u.active ? stamp('On', 'good') : stamp('Turned off', 'mute')}</td><td class="nowrap">${u.lastLogin ? fmtDate(isoOf(new Date(u.lastLogin))) : '<span class="muted">Never</span>'}</td><td class="acts">${u.role === 'owner' ? '' : `<button class="link-btn" data-action="user-edit" data-id="${esc(u.id)}">Edit access</button> <button class="link-btn" data-action="user-pass" data-id="${esc(u.id)}">Reset password</button> <button class="link-btn danger" data-action="user-del" data-id="${esc(u.id)}">Delete</button>`}</td></tr>`);
+  const body = S.users.slice().sort((a, b) => (a.role === 'owner' ? 0 : 1) - (b.role === 'owner' ? 0 : 1) || byName(a, b)).map(u => {
+    const roleBadge = u.role === 'owner'
+      ? stamp(u.title ? `${u.title}: everything` : 'Owner: everything', 'good')
+      : u.modules.map(m => stamp(MODULE_NAMES[m], 'info')).join(' ');
+    const kycBadge = u.kycGateActive
+      ? ` ${stamp('🔒 KYC Policy Pending', 'warn')}`
+      : u.kycCompleted
+      ? ` ${stamp('✓ KYC Verified', 'good')}`
+      : '';
+    return `<tr><td><b>${esc(u.name)}</b>${u.title ? `<span class="sub">${esc(u.title)}${u.email ? ' · ' + esc(u.email) : ''}</span>` : ''}${u.id === S.user.id ? '<span class="sub">This is you</span>' : ''}</td><td class="mono">${esc(u.loginId)}</td><td>${roleBadge}${kycBadge}</td><td>${u.active ? stamp('On', 'good') : stamp('Turned off', 'mute')}</td><td class="nowrap">${u.lastLogin ? fmtDate(isoOf(new Date(u.lastLogin))) : '<span class="muted">Never</span>'}</td><td class="acts">${u.role === 'owner' && u.id === S.user.id ? '' : `<button class="link-btn" data-action="user-edit" data-id="${esc(u.id)}">Edit access</button> <button class="link-btn" data-action="user-pass" data-id="${esc(u.id)}">Reset password</button>${u.role === 'owner' ? '' : ` <button class="link-btn danger" data-action="user-del" data-id="${esc(u.id)}">Delete</button>`}`}</td></tr>`;
+  });
   return head('ADMIN', 'Logins and access', `<b>${S.users.length}</b> logins · each one opens only the modules you tick`,
       '<button class="btn" data-action="edit-company">Change company name</button><button class="btn btn-primary" data-action="user-new">Add login</button>')
-    + table(['Name', 'Login ID', 'Can open', 'Status', 'Last login', ''], body)
-    + `<p class="note">An ERP login sees only ERP, an HRMS login only HRMS, and so on. Only the owner login sees every module, this page and the overview. Passwords are stored scrambled and cannot be read back: if someone forgets theirs, use Reset password.</p>`;
+    + table(['Name', 'Login ID', 'Can open & KYC Policy', 'Status', 'Last login', ''], body)
+    + `<p class="note">An ERP login sees only ERP, an HRMS login only HRMS, and so on. Only the owner/co-founder login sees every module, this page and the overview. Passwords are stored scrambled and cannot be read back: if someone forgets theirs, use Reset password.</p>`;
 };
 ACT['user-new'] = () => openForm({
   title: 'Add login', sub: 'Give one to each person or team.', submit: 'Create login',
@@ -321,11 +331,158 @@ ACT.logout = async () => {
   S.status = 'login'; S.user = null; closeDlg(); location.hash = ''; render();
 };
 
-/* ================= sign in and first-time setup ================= */
+/* ================= sign in, KYC policy gate, and first-time setup ================= */
+CHG['kyc-policy-check'] = el => {
+  S.ui.kycPolicyAccepted = !!el.checked;
+  render();
+};
+ACT['kyc-policy-unlock'] = async el => {
+  if (!S.ui.kycPolicyAccepted) {
+    return toast('Please tick the Policy Agreement checkbox first.', 'warn');
+  }
+  el.disabled = true;
+  const oldTxt = el.textContent;
+  el.textContent = '⏳ Verifying Policy & Unlocking Access...';
+  try {
+    const res = await api('POST', '/api/auth/complete-kyc-policy', { acceptedPolicy: true });
+    toast(res.message || '🎉 KYC Verified! Full Co-Founder Portal Access Unlocked!', 'good');
+    S.ui.kycPolicyAccepted = false;
+    await loadData();
+    S.status = S.kycGateRequired ? 'kyc-gate' : 'ready';
+    render();
+  } catch (err) {
+    toast(err.message || 'Could not complete KYC verification.', 'bad');
+    el.disabled = false;
+    el.textContent = oldTxt;
+  }
+};
+
 function renderAuth() {
   const el = $('#auth');
-  if (el.dataset.screen === S.status) return;      // do not wipe a form someone is typing in
+  // For kyc-gate, always re-render live so OCR loading spinners and verified statuses update immediately
+  if (S.status !== 'kyc-gate' && el.dataset.screen === S.status) return;
   el.dataset.screen = S.status;
+
+  if (S.status === 'kyc-gate') {
+    const u = S.user || {};
+    const emp = (S.employees || []).find(e => e.id === u.empId) || (S.employees || [])[0] || { id: u.empId || '', name: u.name || '' };
+    const files = (S.files || []).filter(f => f.employeeId === emp.id);
+    const aadhaarFile = files.find(f => /aadhaar|adhar/i.test(f.kind || ''));
+    const panFile = files.find(f => /pan/i.test(f.kind || ''));
+    const upAadhaar = typeof getKycUploadState === 'function' ? getKycUploadState(emp.id, 'Aadhaar Card') : null;
+    const upPan = typeof getKycUploadState === 'function' ? getKycUploadState(emp.id, 'PAN Card') : null;
+    const bothUploaded = !!(aadhaarFile && panFile);
+    const agreed = !!S.ui.kycPolicyAccepted;
+    const canUnlock = bothUploaded && agreed && !upAadhaar && !upPan;
+    const doneSteps = (aadhaarFile ? 1 : 0) + (panFile ? 1 : 0) + (agreed ? 1 : 0);
+
+    el.innerHTML = `
+      <div class="auth-card kyc-gate-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:2px solid var(--rule);padding-bottom:14px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:12px">
+            <img src="/logo-dark.png" alt="RvmAiTech" style="height:36px;width:auto;display:block">
+            <div>
+              <div class="eyebrow" style="margin:0;color:#f59e0b">🔒 MANDATORY IDENTITY &amp; ACCESS POLICY</div>
+              <h1 style="margin:2px 0 0;font-size:20px">${esc(S.company.name || 'RvmAiTech')} — Executive KYC Verification</h1>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="stamp stamp-info">${esc(u.title || (u.role === 'owner' ? 'Co-Founder / Executive' : 'Staff'))}</span>
+            <button type="button" class="btn btn-sm" data-action="my-password">🔑 Change Password</button>
+            <button type="button" class="btn btn-sm btn-outline" data-action="logout">Log Out</button>
+          </div>
+        </div>
+
+        <div style="background:rgba(245,158,11,0.10);border:1.5px solid rgba(245,158,11,0.35);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+          <div style="font-weight:800;font-size:14px;color:var(--ink)">Welcome, ${esc(u.name || 'Executive')}${u.title ? ` (${esc(u.title)})` : ''}!</div>
+          <p style="margin:5px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.5">
+            <b>Company Security Policy:</b> Portal ka poora access (<b>ERP, CRM, HRMS, Finance, Projects &amp; Admin</b>) unlock karne se pehle aapko apna <b>asli Aadhaar Card</b> aur <b>PAN Card</b> upload karke OCR verify karwana anivarya (mandatory) hai. Fake document, face photo ya kisi aur vyakti ka ID automatically reject ho jayega.
+          </p>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <div class="proc-bar-track" style="flex:1;height:7px"><div class="proc-bar-fill" style="width:${Math.round((doneSteps / 3) * 100)}%"></div></div>
+            <b style="font-size:11.5px;color:${canUnlock ? '#10b981' : '#38bdf8'}">${doneSteps} / 3 Steps Ready</b>
+          </div>
+        </div>
+
+        <!-- Mandatory Document Upload Grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;margin-bottom:16px">
+          <!-- Step 1: Original Aadhaar Card -->
+          <div style="background:var(--paper);border:1.5px solid ${upAadhaar ? '#38bdf8' : aadhaarFile ? '#10b981' : '#f59e0b'};border-radius:10px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                <b style="font-size:14px;color:var(--ink)">1. 🪪 Original Aadhaar Card</b>
+                ${upAadhaar
+                  ? `<span class="stamp stamp-info" style="font-size:10.5px">⏳ Scanning OCR...</span>`
+                  : aadhaarFile
+                    ? `<span class="stamp stamp-good" style="font-size:10.5px">Verified ✓</span>`
+                    : `<span class="stamp stamp-warn" style="font-size:10.5px">Required ⚠️</span>`}
+              </div>
+              <div style="font-size:12px;color:var(--ink-2);margin-top:6px">UID Number: <b style="color:var(--ink)">${esc(emp.aadhaarNumber || 'Upload Aadhaar to auto-verify')}</b></div>
+              <div style="font-size:11.5px;color:#38bdf8;margin-top:6px;background:rgba(56,189,248,0.08);padding:7px 9px;border-radius:6px;border:1px dashed rgba(56,189,248,0.35)">
+                <b>📍 Permanent Address (OCR Auto-Extracted):</b><br>${esc(emp.permAddress || 'Aadhaar upload karte hi address automatically verify hoga')}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${upAadhaar
+                ? renderOcrLoadingBox(upAadhaar)
+                : `${aadhaarFile ? `<a class="btn btn-sm" href="/api/files/${esc(aadhaarFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                   <label class="btn btn-sm btn-primary" for="gate-aadhaar-${esc(emp.id)}" style="cursor:pointer;flex:1;text-align:center">${aadhaarFile ? 'Re-upload Aadhaar' : '📤 Upload Original Aadhaar'}</label>
+                   <input type="file" id="gate-aadhaar-${esc(emp.id)}" data-change="kyc-quick-upload" data-id="${esc(emp.id)}" data-kind="Aadhaar Card" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>`}
+            </div>
+          </div>
+
+          <!-- Step 2: Original PAN Card -->
+          <div style="background:var(--paper);border:1.5px solid ${upPan ? '#38bdf8' : panFile ? '#10b981' : '#f59e0b'};border-radius:10px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                <b style="font-size:14px;color:var(--ink)">2. 💳 Original PAN Card</b>
+                ${upPan
+                  ? `<span class="stamp stamp-info" style="font-size:10.5px">⏳ Scanning OCR...</span>`
+                  : panFile
+                    ? `<span class="stamp stamp-good" style="font-size:10.5px">Verified ✓</span>`
+                    : `<span class="stamp stamp-warn" style="font-size:10.5px">Required ⚠️</span>`}
+              </div>
+              <div style="font-size:12px;color:var(--ink-2);margin-top:6px">PAN Number: <b style="color:var(--ink)">${esc(emp.panNumber || 'Upload PAN to auto-verify')}</b></div>
+              <div style="font-size:11.5px;color:var(--ink-2);margin-top:6px;background:rgba(148,163,184,0.08);padding:7px 9px;border-radius:6px;border:1px solid var(--rule)">
+                <b>👤 Father's / Guardian Name:</b> ${esc(emp.parentsName || 'Will auto-extract from PAN/Aadhaar')}<br>
+                <b>🎂 Date of Birth:</b> ${emp.dob ? fmtDate(emp.dob) : 'Will auto-extract from document'}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${upPan
+                ? renderOcrLoadingBox(upPan)
+                : `${panFile ? `<a class="btn btn-sm" href="/api/files/${esc(panFile.id)}" target="_blank" rel="noopener">👁️ View</a>` : ''}
+                   <label class="btn btn-sm btn-primary" for="gate-pan-${esc(emp.id)}" style="cursor:pointer;flex:1;text-align:center">${panFile ? 'Re-upload PAN' : '📤 Upload Original PAN'}</label>
+                   <input type="file" id="gate-pan-${esc(emp.id)}" data-change="kyc-quick-upload" data-id="${esc(emp.id)}" data-kind="PAN Card" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>`}
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Policy Terms & Consent -->
+        <div style="background:rgba(148,163,184,0.07);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+          <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#38bdf8;margin-bottom:6px">📜 3. RvmAiTech Mandatory Executive KYC &amp; Access Policy</div>
+          <ul style="margin:0 0 10px;padding-left:18px;font-size:12px;color:var(--ink-2);line-height:1.55">
+            <li>Only genuine, original government-issued <b>Aadhaar Card</b> and <b>PAN Card</b> belonging to <b>${esc(u.name || 'the account holder')}</b> are permitted.</li>
+            <li>Automated OCR strictly verifies identity &amp; authenticity — uploaded documents are archived in RvmAiTech's official statutory &amp; governance register.</li>
+            <li>Full access to ERP, CRM, HRMS, Finance, Projects, and Admin modules unlocks strictly after successful verification and policy acceptance.</li>
+          </ul>
+          <label class="proc-chk" style="padding:8px 10px;border-radius:8px;background:var(--paper);border:1px solid ${agreed ? '#10b981' : 'var(--rule)'}">
+            <input type="checkbox" id="kycPolicyAgree" data-change="kyc-policy-check" ${agreed ? 'checked' : ''}>
+            <span style="font-size:12.5px;font-weight:600;color:var(--ink)">I confirm that the uploaded Aadhaar Card &amp; PAN Card are my authentic original documents and I agree to RvmAiTech's Mandatory Executive KYC &amp; Governance Policy.</span>
+          </label>
+        </div>
+
+        <button type="button" class="btn btn-primary" data-action="kyc-policy-unlock" ${canUnlock ? '' : 'disabled'} style="width:100%;padding:12px 16px;font-size:14px;font-weight:800;${canUnlock ? 'background:#059669;border-color:#059669;' : 'opacity:0.55;cursor:not-allowed;'}">
+          ${canUnlock
+            ? '🔓 Accept Policy &amp; Unlock Full Co-Founder Portal Access'
+            : !bothUploaded
+              ? '🔒 Upload &amp; Verify Both Original Aadhaar Card &amp; PAN Card First'
+              : '🔒 Tick the Policy Agreement Checkbox Above to Unlock'}
+        </button>
+      </div>`;
+    return;
+  }
+
   if (S.status === 'setup') {
     el.innerHTML = `<form class="auth-card wide" id="setupForm"><div class="eyebrow">FIRST-TIME SETUP</div><h1>Create the owner account</h1><p>The owner login sees every module. You will make separate logins for ERP, CRM, HRMS and Finance, each of which opens only its own module.</p>
       <div class="fields">
@@ -375,7 +532,7 @@ function renderAuth() {
         const fd = new FormData(form);
         await api('POST', '/api/login', { loginId: String(fd.get('loginId') || '').trim(), password: String(fd.get('password') || '') });
         await loadData();
-        S.status = 'ready';
+        S.status = S.kycGateRequired ? 'kyc-gate' : 'ready';
         render();
       }, true);
     });
@@ -389,7 +546,7 @@ async function boot() {
     const st = await api('GET', '/api/state');
     S.company = { name: st.company || '' }; S.needCode = !!st.needCode;
     if (st.setup) S.status = 'setup';
-    else if (st.user) { await loadData(); S.status = 'ready'; }
+    else if (st.user) { await loadData(); S.status = S.kycGateRequired ? 'kyc-gate' : 'ready'; }
     else S.status = 'login';
   } catch (e) {
     $('#auth').hidden = false;

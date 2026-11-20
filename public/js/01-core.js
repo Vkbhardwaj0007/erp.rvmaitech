@@ -108,6 +108,7 @@ async function api(method, url, body, rawType) {
 async function loadData() {
   const r = await api('GET', '/api/data');
   S.user = r.user; S.company = r.company || { name: '' }; S.sampleCount = r.sampleCount || 0;
+  S.kycGateRequired = !!(r.kycGateRequired || (r.user && r.user.kycGateActive));
   for (const k of LISTS) S[k] = r.data[k] || [];
   S.attendance = r.data.attendance || {};
 }
